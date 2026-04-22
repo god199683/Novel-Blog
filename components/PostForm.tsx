@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Editor from "./Editor";
 
@@ -13,15 +13,52 @@ type Props = {
   };
 };
 
-const CATEGORIES = ["장편", "단편", "에세이", "기타"];
-
 export default function PostForm({ initial }: Props) {
   const router = useRouter();
   const [title, setTitle] = useState(initial?.title ?? "");
   const [content, setContent] = useState(initial?.content ?? "");
   const [category, setCategory] = useState(initial?.category ?? "");
+  const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
+  const [newCat, setNewCat] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("/api/categories")
+      .then((r) => r.json())
+      .then((d) => Array.isArray(d) && setCats(d));
+  }, []);
+
+  const addCategory = async () => {
+    const name = newCat.trim();
+    if (!name) return;
+    try {
+      const res = await fetch("/api/categories", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "추가 실패");
+      setCats((cs) => [...cs, { id: data.id, name: data.name }]);
+      setCategory(data.name);
+      setNewCat("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "오류");
+    }
+  };
+
+  const deleteCategory = async (id: string, name: string) => {
+    if (!confirm(`'${name}' 카테고리를 삭제할까요? (기존 글의 카테고리 태그는 남습니다)`)) return;
+    try {
+      const res = await fetch(`/api/categories/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("삭제 실패");
+      setCats((cs) => cs.filter((c) => c.id !== id));
+      if (category === name) setCategory("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "오류");
+    }
+  };
 
   const submit = async () => {
     if (!title.trim()) {
@@ -76,20 +113,68 @@ export default function PostForm({ initial }: Props) {
         placeholder="제목"
         className="w-full border-b-2 border-sky-200 bg-transparent py-3 text-2xl font-bold text-slate-900 outline-none focus:border-brand"
       />
-      <div className="flex items-center gap-2">
-        <label className="text-sm text-slate-500">카테고리</label>
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className="rounded border border-sky-200 bg-white px-2 py-1 text-sm text-slate-700"
-        >
-          <option value="">선택 안 함</option>
-          {CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-sm text-slate-500">카테고리</label>
+          <button
+            type="button"
+            onClick={() => setCategory("")}
+            className={`rounded-full px-3 py-1 text-xs ${
+              category === ""
+                ? "bg-brand text-white"
+                : "border border-sky-200 text-slate-600 hover:border-brand"
+            }`}
+          >
+            선택 안 함
+          </button>
+          {cats.map((c) => (
+            <span
+              key={c.id}
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs ${
+                category === c.name
+                  ? "bg-brand text-white"
+                  : "border border-sky-200 text-slate-700 hover:border-brand"
+              }`}
+            >
+              <button type="button" onClick={() => setCategory(c.name)}>
+                {c.name}
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteCategory(c.id, c.name)}
+                className={`ml-1 text-[10px] ${
+                  category === c.name ? "text-white/80 hover:text-white" : "text-slate-400 hover:text-red-500"
+                }`}
+                title="삭제"
+              >
+                ✕
+              </button>
+            </span>
           ))}
-        </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={newCat}
+            onChange={(e) => setNewCat(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addCategory();
+              }
+            }}
+            placeholder="새 카테고리 이름"
+            maxLength={30}
+            className="rounded border border-sky-200 bg-white px-2 py-1 text-sm text-slate-700 outline-none focus:border-brand"
+          />
+          <button
+            type="button"
+            onClick={addCategory}
+            className="rounded-full border border-sky-200 px-3 py-1 text-xs text-slate-700 hover:border-brand hover:text-brand"
+          >
+            + 추가
+          </button>
+        </div>
       </div>
       <Editor initialContent={content} onChange={setContent} />
       {error && <p className="text-sm text-red-600">{error}</p>}

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
+import { users, categories } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { createSession, SESSION_COOKIE } from "@/lib/auth";
@@ -44,6 +44,17 @@ export async function POST(req: NextRequest) {
     passwordHash,
     blogTitle: `${displayName}의 블로그`,
   });
+
+  // Default categories for new users
+  const defaults = ["장편", "단편", "에세이", "기타"];
+  await db.insert(categories).values(
+    defaults.map((name, i) => ({
+      id: makeId(),
+      userId: id,
+      name,
+      sortOrder: i,
+    }))
+  );
 
   const token = await createSession({ userId: id, username, displayName });
   const res = NextResponse.json({ ok: true, username });
