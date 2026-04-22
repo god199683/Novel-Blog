@@ -42,7 +42,7 @@ function LoginForm() {
         value={identifier}
         onChange={(e) => setIdentifier(e.target.value)}
         placeholder="아이디 또는 이메일"
-        className="w-full rounded border border-zinc-300 px-3 py-2 outline-none focus:border-brand"
+        className="w-full rounded border border-sky-200 px-3 py-2 outline-none focus:border-brand"
         autoFocus
       />
       <input
@@ -50,7 +50,7 @@ function LoginForm() {
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         placeholder="비밀번호"
-        className="w-full rounded border border-zinc-300 px-3 py-2 outline-none focus:border-brand"
+        className="w-full rounded border border-sky-200 px-3 py-2 outline-none focus:border-brand"
       />
       {error && <p className="text-sm text-red-600">{error}</p>}
       <button
@@ -60,7 +60,7 @@ function LoginForm() {
       >
         {loading ? "로그인 중..." : "로그인"}
       </button>
-      <p className="text-center text-sm text-zinc-500">
+      <p className="text-center text-sm text-slate-500">
         계정이 없나요?{" "}
         <Link href="/signup" className="text-brand hover:underline">
           가입하기
@@ -72,7 +72,7 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="py-20 text-center text-zinc-400">로딩 중...</div>}>
+    <Suspense fallback={<div className="py-20 text-center text-slate-400">로딩 중...</div>}>
       <LoginForm />
     </Suspense>
   );

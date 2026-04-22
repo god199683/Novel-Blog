@@ -26,12 +26,12 @@ export default async function HomePage() {
   return (
     <div>
       <section className="mb-10">
-        <h1 className="text-3xl font-bold">최신 이야기</h1>
-        <p className="mt-2 text-zinc-500">여러 작가의 소설과 에세이</p>
+        <h1 className="text-3xl font-bold text-slate-900">최신 이야기</h1>
+        <p className="mt-2 text-slate-500">여러 작가의 소설과 에세이</p>
       </section>
 
       {rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-zinc-500">
+        <div className="rounded-lg border border-dashed border-sky-200 bg-white/60 p-10 text-center text-slate-500">
           아직 작성된 글이 없어요.{" "}
           <Link href="/signup" className="text-brand underline">
             첫 글을 써보세요
@@ -42,24 +42,24 @@ export default async function HomePage() {
           {rows.map((p) => (
             <li
               key={p.id}
-              className="group rounded-lg border border-zinc-200 p-5 transition hover:border-brand hover:shadow-sm"
+              className="group rounded-xl border border-sky-100 bg-white p-5 shadow-sm transition hover:border-brand hover:shadow-md"
             >
               <Link href={`/u/${p.authorUsername}/${p.slug}`} className="block">
                 {p.category && (
-                  <span className="mb-2 inline-block rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-600">
+                  <span className="mb-2 inline-block rounded-full bg-brand-light px-2 py-0.5 text-xs text-brand-dark">
                     {p.category}
                   </span>
                 )}
-                <h2 className="text-xl font-bold group-hover:text-brand">
+                <h2 className="text-xl font-bold text-slate-900 group-hover:text-brand">
                   {p.title}
                 </h2>
                 {p.excerpt && (
-                  <p className="mt-2 line-clamp-2 text-sm text-zinc-600">
+                  <p className="mt-2 line-clamp-2 text-sm text-slate-600">
                     {p.excerpt}
                   </p>
                 )}
               </Link>
-              <div className="mt-3 flex items-center justify-between text-xs text-zinc-500">
+              <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
                 <Link
                   href={`/u/${p.authorUsername}`}
                   className="hover:text-brand"

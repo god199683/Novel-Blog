@@ -38,48 +38,48 @@ export default function SignupPage() {
     <form onSubmit={submit} className="mx-auto max-w-sm space-y-4 py-10">
       <h1 className="text-2xl font-bold">회원가입</h1>
       <div>
-        <label className="mb-1 block text-sm text-zinc-600">아이디 (URL에 사용)</label>
+        <label className="mb-1 block text-sm text-slate-600">아이디 (URL에 사용)</label>
         <input
           type="text"
           value={username}
           onChange={(e) => setUsername(e.target.value.toLowerCase())}
           placeholder="영문 소문자/숫자 3-20자"
-          className="w-full rounded border border-zinc-300 px-3 py-2 outline-none focus:border-brand"
+          className="w-full rounded border border-sky-200 px-3 py-2 outline-none focus:border-brand"
           autoFocus
         />
         {username && (
-          <p className="mt-1 text-xs text-zinc-400">
+          <p className="mt-1 text-xs text-slate-400">
             블로그 주소: /u/{username}
           </p>
         )}
       </div>
       <div>
-        <label className="mb-1 block text-sm text-zinc-600">필명</label>
+        <label className="mb-1 block text-sm text-slate-600">필명</label>
         <input
           type="text"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="독자에게 보이는 이름"
-          className="w-full rounded border border-zinc-300 px-3 py-2 outline-none focus:border-brand"
+          className="w-full rounded border border-sky-200 px-3 py-2 outline-none focus:border-brand"
         />
       </div>
       <div>
-        <label className="mb-1 block text-sm text-zinc-600">이메일</label>
+        <label className="mb-1 block text-sm text-slate-600">이메일</label>
         <input
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full rounded border border-zinc-300 px-3 py-2 outline-none focus:border-brand"
+          className="w-full rounded border border-sky-200 px-3 py-2 outline-none focus:border-brand"
         />
       </div>
       <div>
-        <label className="mb-1 block text-sm text-zinc-600">비밀번호</label>
+        <label className="mb-1 block text-sm text-slate-600">비밀번호</label>
         <input
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="8자 이상"
-          className="w-full rounded border border-zinc-300 px-3 py-2 outline-none focus:border-brand"
+          className="w-full rounded border border-sky-200 px-3 py-2 outline-none focus:border-brand"
         />
       </div>
       {error && <p className="text-sm text-red-600">{error}</p>}
@@ -90,7 +90,7 @@ export default function SignupPage() {
       >
         {loading ? "가입 중..." : "가입하고 글쓰기"}
       </button>
-      <p className="text-center text-sm text-zinc-500">
+      <p className="text-center text-sm text-slate-500">
         이미 계정이 있나요?{" "}
         <Link href="/login" className="text-brand hover:underline">
           로그인

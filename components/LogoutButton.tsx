@@ -11,7 +11,7 @@ export default function LogoutButton() {
         router.refresh();
         router.push("/");
       }}
-      className="rounded-full px-3 py-1.5 text-zinc-600 hover:bg-zinc-100"
+      className="rounded-full px-3 py-1.5 text-slate-600 hover:bg-sky-50"
     >
       로그아웃
     </button>

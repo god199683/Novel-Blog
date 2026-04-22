@@ -26,11 +26,11 @@ export default async function RootLayout({
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"
         />
       </head>
-      <body className="min-h-screen bg-white text-zinc-900">
-        <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/90 backdrop-blur">
+      <body className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white text-slate-900">
+        <header className="sticky top-0 z-30 border-b border-sky-100 bg-white/80 backdrop-blur">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-            <Link href="/" className="text-xl font-bold tracking-tight">
-              📖 Novel Blog
+            <Link href="/" className="text-xl font-bold tracking-tight text-slate-800">
+              <span className="text-brand">📖</span> Novel Blog
             </Link>
             <nav className="flex items-center gap-2 text-sm">
               {session ? (
@@ -43,11 +43,11 @@ export default async function RootLayout({
                   </Link>
                   <Link
                     href="/dashboard"
-                    className="rounded-full px-3 py-1.5 text-zinc-700 hover:bg-zinc-100"
+                    className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
                   >
                     내 글
                   </Link>
-                  <span className="px-2 text-zinc-500">
+                  <span className="px-2 text-slate-500">
                     {session.displayName}
                   </span>
                   <LogoutButton />
@@ -56,7 +56,7 @@ export default async function RootLayout({
                 <>
                   <Link
                     href="/login"
-                    className="rounded-full px-3 py-1.5 text-zinc-700 hover:bg-zinc-100"
+                    className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
                   >
                     로그인
                   </Link>
@@ -72,7 +72,7 @@ export default async function RootLayout({
           </div>
         </header>
         <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
-        <footer className="mt-16 border-t border-zinc-200 py-8 text-center text-xs text-zinc-500">
+        <footer className="mt-16 border-t border-sky-100 py-8 text-center text-xs text-slate-500">
           © {new Date().getFullYear()} Novel Blog
         </footer>
       </body>

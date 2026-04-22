@@ -30,32 +30,32 @@ export default async function PostPage({
 
   return (
     <article className="mx-auto max-w-3xl">
-      <header className="mb-8 border-b border-zinc-200 pb-6">
-        <div className="mb-3 flex items-center gap-2 text-xs text-zinc-500">
+      <header className="mb-8 border-b border-sky-100 pb-6">
+        <div className="mb-3 flex items-center gap-2 text-xs text-slate-500">
           {post.category && (
-            <span className="rounded-full bg-zinc-100 px-2 py-0.5">
+            <span className="rounded-full bg-brand-light px-2 py-0.5 text-brand-dark">
               {post.category}
             </span>
           )}
           <time>{post.createdAt.toISOString().slice(0, 10)}</time>
           {post.updatedAt.getTime() - post.createdAt.getTime() > 60000 && (
-            <span className="text-zinc-400">
+            <span className="text-slate-400">
               (수정 {post.updatedAt.toISOString().slice(0, 10)})
             </span>
           )}
         </div>
-        <h1 className="text-3xl font-bold leading-snug">{post.title}</h1>
+        <h1 className="text-3xl font-bold leading-snug text-slate-900">{post.title}</h1>
         <div className="mt-4 flex items-center justify-between">
           <Link
             href={`/u/${user.username}`}
-            className="text-sm text-zinc-700 hover:text-brand"
+            className="text-sm text-slate-700 hover:text-brand"
           >
-            {user.displayName} <span className="text-zinc-400">@{user.username}</span>
+            {user.displayName} <span className="text-slate-400">@{user.username}</span>
           </Link>
           {isOwner && (
             <Link
               href={`/edit/${post.id}`}
-              className="rounded-full border border-zinc-200 px-3 py-1 text-xs hover:border-brand hover:text-brand"
+              className="rounded-full border border-sky-200 px-3 py-1 text-xs text-slate-700 hover:border-brand hover:text-brand"
             >
               수정
             </Link>

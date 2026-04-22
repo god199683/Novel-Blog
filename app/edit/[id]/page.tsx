@@ -22,7 +22,7 @@ export default async function EditPage({
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold">글 수정</h1>
+      <h1 className="mb-6 text-2xl font-bold text-slate-900">글 수정</h1>
       <PostForm
         initial={{
           id: post.id,

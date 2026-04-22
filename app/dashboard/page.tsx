@@ -23,8 +23,8 @@ export default async function DashboardPage() {
     <div>
       <header className="mb-8 flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-bold">내 글 관리</h1>
-          <p className="mt-1 text-sm text-zinc-500">
+          <h1 className="text-2xl font-bold text-slate-900">내 글 관리</h1>
+          <p className="mt-1 text-sm text-slate-500">
             <Link href={`/u/${session.username}`} className="hover:text-brand">
               내 블로그 보기 →
             </Link>
@@ -39,26 +39,30 @@ export default async function DashboardPage() {
       </header>
 
       {rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-zinc-300 p-10 text-center text-zinc-500">
+        <div className="rounded-lg border border-dashed border-sky-200 bg-white/60 p-10 text-center text-slate-500">
           아직 쓴 글이 없어요.
         </div>
       ) : (
-        <ul className="divide-y divide-zinc-100">
+        <ul className="divide-y divide-sky-100">
           {rows.map((p) => (
             <li key={p.id} className="flex items-center justify-between py-4">
               <Link
                 href={`/u/${session.username}/${p.slug}`}
                 className="flex-1"
               >
-                <div className="flex items-center gap-2 text-xs text-zinc-500">
-                  {p.category && <span>{p.category}</span>}
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  {p.category && (
+                    <span className="rounded-full bg-brand-light px-2 py-0.5 text-brand-dark">
+                      {p.category}
+                    </span>
+                  )}
                   <time>{p.updatedAt.toISOString().slice(0, 10)}</time>
                 </div>
-                <p className="mt-0.5 font-medium hover:text-brand">{p.title}</p>
+                <p className="mt-0.5 font-medium text-slate-800 hover:text-brand">{p.title}</p>
               </Link>
               <Link
                 href={`/edit/${p.id}`}
-                className="rounded-full border border-zinc-200 px-3 py-1 text-xs hover:border-brand hover:text-brand"
+                className="rounded-full border border-sky-200 px-3 py-1 text-xs text-slate-700 hover:border-brand hover:text-brand"
               >
                 수정
               </Link>

@@ -74,14 +74,14 @@ export default function PostForm({ initial }: Props) {
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="제목"
-        className="w-full border-b-2 border-zinc-200 py-3 text-2xl font-bold outline-none focus:border-brand"
+        className="w-full border-b-2 border-sky-200 bg-transparent py-3 text-2xl font-bold text-slate-900 outline-none focus:border-brand"
       />
       <div className="flex items-center gap-2">
-        <label className="text-sm text-zinc-500">카테고리</label>
+        <label className="text-sm text-slate-500">카테고리</label>
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="rounded border border-zinc-200 px-2 py-1 text-sm"
+          className="rounded border border-sky-200 bg-white px-2 py-1 text-sm text-slate-700"
         >
           <option value="">선택 안 함</option>
           {CATEGORIES.map((c) => (

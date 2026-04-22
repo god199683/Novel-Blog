@@ -46,10 +46,10 @@ export default function Editor({ initialContent = "", onChange }: Props) {
     };
   }, [editor]);
 
-  if (!editor) return <div className="h-64 animate-pulse rounded bg-zinc-100" />;
+  if (!editor) return <div className="h-64 animate-pulse rounded bg-sky-50" />;
 
   return (
-    <div className="rounded-lg border border-zinc-200">
+    <div className="rounded-xl border border-sky-100 bg-white shadow-sm">
       <Toolbar editor={editor} />
       <div className="px-4">
         <EditorContent editor={editor} />
@@ -81,11 +81,11 @@ function Toolbar({ editor }: { editor: TiptapEditor }) {
 
   const btn = (active: boolean) =>
     `rounded px-2 py-1 text-sm ${
-      active ? "bg-zinc-900 text-white" : "text-zinc-700 hover:bg-zinc-100"
+      active ? "bg-brand text-white" : "text-slate-700 hover:bg-sky-50"
     }`;
 
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b border-zinc-200 p-2">
+    <div className="flex flex-wrap items-center gap-1 border-b border-sky-100 bg-sky-50/30 p-2">
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
@@ -107,7 +107,7 @@ function Toolbar({ editor }: { editor: TiptapEditor }) {
       >
         H3
       </button>
-      <span className="mx-1 h-5 w-px bg-zinc-200" />
+      <span className="mx-1 h-5 w-px bg-sky-200" />
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBold().run()}
@@ -129,7 +129,7 @@ function Toolbar({ editor }: { editor: TiptapEditor }) {
       >
         <s>S</s>
       </button>
-      <span className="mx-1 h-5 w-px bg-zinc-200" />
+      <span className="mx-1 h-5 w-px bg-sky-200" />
       <button
         type="button"
         onClick={() => editor.chain().focus().toggleBulletList().run()}
@@ -158,7 +158,7 @@ function Toolbar({ editor }: { editor: TiptapEditor }) {
       >
         {"</>"}
       </button>
-      <span className="mx-1 h-5 w-px bg-zinc-200" />
+      <span className="mx-1 h-5 w-px bg-sky-200" />
       <button type="button" onClick={addLink} className={btn(editor.isActive("link"))}>
         🔗
       </button>
@@ -172,7 +172,7 @@ function Toolbar({ editor }: { editor: TiptapEditor }) {
       >
         —
       </button>
-      <span className="mx-1 h-5 w-px bg-zinc-200" />
+      <span className="mx-1 h-5 w-px bg-sky-200" />
       <button
         type="button"
         onClick={() => editor.chain().focus().undo().run()}
