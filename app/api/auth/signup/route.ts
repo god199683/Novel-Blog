@@ -12,7 +12,6 @@ export async function POST(req: NextRequest) {
 
   const username = String(body.username ?? "").toLowerCase().trim();
   const displayName = String(body.displayName ?? "").trim();
-  const email = String(body.email ?? "").toLowerCase().trim();
   const password = String(body.password ?? "");
 
   if (!validateUsername(username)) {
@@ -24,9 +23,6 @@ export async function POST(req: NextRequest) {
   if (displayName.length < 1 || displayName.length > 40) {
     return NextResponse.json({ error: "필명은 1-40자" }, { status: 400 });
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return NextResponse.json({ error: "이메일 형식이 올바르지 않아요" }, { status: 400 });
-  }
   if (password.length < 8) {
     return NextResponse.json({ error: "비밀번호는 8자 이상" }, { status: 400 });
   }
@@ -37,12 +33,6 @@ export async function POST(req: NextRequest) {
   if (existingUsername) {
     return NextResponse.json({ error: "이미 사용 중인 아이디" }, { status: 409 });
   }
-  const existingEmail = await db.query.users.findFirst({
-    where: eq(users.email, email),
-  });
-  if (existingEmail) {
-    return NextResponse.json({ error: "이미 가입된 이메일" }, { status: 409 });
-  }
 
   const passwordHash = await bcrypt.hash(password, 10);
   const id = makeId();
@@ -50,7 +40,7 @@ export async function POST(req: NextRequest) {
     id,
     username,
     displayName,
-    email,
+    email: null,
     passwordHash,
     blogTitle: `${displayName}의 블로그`,
   });

@@ -9,16 +9,14 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
   if (!body) return NextResponse.json({ error: "Invalid body" }, { status: 400 });
 
-  const identifier = String(body.identifier ?? "").toLowerCase().trim();
+  const username = String(body.username ?? body.identifier ?? "").toLowerCase().trim();
   const password = String(body.password ?? "");
 
-  if (!identifier || !password) {
+  if (!username || !password) {
     return NextResponse.json({ error: "아이디와 비밀번호를 입력해 주세요" }, { status: 400 });
   }
 
-  const user =
-    (await db.query.users.findFirst({ where: eq(users.username, identifier) })) ??
-    (await db.query.users.findFirst({ where: eq(users.email, identifier) }));
+  const user = await db.query.users.findFirst({ where: eq(users.username, username) });
 
   if (!user) {
     return NextResponse.json({ error: "계정을 찾을 수 없어요" }, { status: 401 });

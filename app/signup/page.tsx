@@ -8,7 +8,6 @@ export default function SignupPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -21,7 +20,7 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username, displayName, email, password }),
+        body: JSON.stringify({ username, displayName, password }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "가입 실패");
@@ -36,7 +35,7 @@ export default function SignupPage() {
 
   return (
     <form onSubmit={submit} className="mx-auto max-w-sm space-y-4 py-10">
-      <h1 className="text-2xl font-bold">회원가입</h1>
+      <h1 className="text-2xl font-bold text-slate-900">회원가입</h1>
       <div>
         <label className="mb-1 block text-sm text-slate-600">아이디 (URL에 사용)</label>
         <input
@@ -60,15 +59,6 @@ export default function SignupPage() {
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           placeholder="독자에게 보이는 이름"
-          className="w-full rounded border border-sky-200 px-3 py-2 outline-none focus:border-brand"
-        />
-      </div>
-      <div>
-        <label className="mb-1 block text-sm text-slate-600">이메일</label>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
           className="w-full rounded border border-sky-200 px-3 py-2 outline-none focus:border-brand"
         />
       </div>

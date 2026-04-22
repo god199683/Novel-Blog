@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 function LoginForm() {
   const router = useRouter();
   const params = useSearchParams();
-  const [identifier, setIdentifier] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -20,7 +20,7 @@ function LoginForm() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ identifier, password }),
+        body: JSON.stringify({ username, password }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "로그인 실패");
@@ -36,12 +36,12 @@ function LoginForm() {
 
   return (
     <form onSubmit={submit} className="mx-auto max-w-sm space-y-4 py-10">
-      <h1 className="text-2xl font-bold">로그인</h1>
+      <h1 className="text-2xl font-bold text-slate-900">로그인</h1>
       <input
         type="text"
-        value={identifier}
-        onChange={(e) => setIdentifier(e.target.value)}
-        placeholder="아이디 또는 이메일"
+        value={username}
+        onChange={(e) => setUsername(e.target.value.toLowerCase())}
+        placeholder="아이디"
         className="w-full rounded border border-sky-200 px-3 py-2 outline-none focus:border-brand"
         autoFocus
       />
