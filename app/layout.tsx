@@ -42,12 +42,18 @@ export default async function RootLayout({
                     글쓰기
                   </Link>
                   <Link
+                    href={`/u/${session.username}`}
+                    className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
+                  >
+                    내 블로그
+                  </Link>
+                  <Link
                     href="/dashboard"
                     className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
                   >
                     내 글
                   </Link>
-                  <span className="px-2 text-slate-500">
+                  <span className="hidden px-2 text-slate-500 sm:inline">
                     {session.displayName}
                   </span>
                   <LogoutButton />
