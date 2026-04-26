@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { users, posts } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { verifySession } from "@/lib/auth";
+import ArticleViewer from "@/components/ArticleViewer";
 
 export const dynamic = "force-dynamic";
 
@@ -70,9 +71,10 @@ export default async function PostPage({
           )}
         </div>
       </header>
-      <div
-        className="article-body"
-        dangerouslySetInnerHTML={{ __html: post.content }}
+      <ArticleViewer
+        html={post.content}
+        title={post.title}
+        authorName={user.displayName}
       />
     </article>
   );
