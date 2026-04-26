@@ -105,7 +105,7 @@ export default async function UserBlogPage({
                 return (
                   <li key={p.id} className="flex items-start justify-between gap-4 py-5">
                     <Link
-                      href={`/u/${user.username}/${p.slug}`}
+                      href={`/u/${user.username}/${p.id}`}
                       className="block flex-1 group"
                     >
                       <div className="flex items-center gap-2 text-xs text-slate-500">

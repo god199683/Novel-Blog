@@ -47,7 +47,7 @@ export default async function DashboardPage() {
           {rows.map((p) => (
             <li key={p.id} className="flex items-center justify-between py-4">
               <Link
-                href={`/u/${session.username}/${p.slug}`}
+                href={`/u/${session.username}/${p.id}`}
                 className="flex-1"
               >
                 <div className="flex items-center gap-2 text-xs text-slate-500">

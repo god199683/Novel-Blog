@@ -74,6 +74,28 @@ export default async function PostPage({
     );
   }
 
+  // Find prev/next post within the same folder for book-mode
+  // navigation. Reading order = oldest → newest (chronological,
+  // matches how serialized novels are written chapter by chapter).
+  let prevSibling: { id: string; title: string } | null = null;
+  let nextSibling: { id: string; title: string } | null = null;
+  if (post.folderId) {
+    const sibConds = [
+      eq(posts.authorId, user.id),
+      eq(posts.folderId, post.folderId),
+    ];
+    if (!isOwner) sibConds.push(eq(posts.published, true));
+    const siblings = await db
+      .select({ id: posts.id, title: posts.title })
+      .from(posts)
+      .where(and(...sibConds))
+      .orderBy(asc(posts.createdAt));
+    const idx = siblings.findIndex((s) => s.id === post.id);
+    if (idx > 0) prevSibling = siblings[idx - 1];
+    if (idx >= 0 && idx < siblings.length - 1)
+      nextSibling = siblings[idx + 1];
+  }
+
   return (
     <article className="mx-auto max-w-3xl">
       <header className="mb-8 border-b border-sky-100 pb-6">
@@ -113,40 +135,20 @@ export default async function PostPage({
           )}
         </div>
       </header>
-      {await (async () => {
-        // Find prev/next post within the same folder for book-mode
-        // navigation. Reading order = oldest → newest (chronological,
-        // matches how serialized novels are written chapter by chapter).
-        let prev: { id: string; title: string } | null = null;
-        let next: { id: string; title: string } | null = null;
-        if (post.folderId) {
-          const conds = [
-            eq(posts.authorId, user.id),
-            eq(posts.folderId, post.folderId),
-          ];
-          if (!isOwner) conds.push(eq(posts.published, true));
-          const siblings = await db
-            .select({ id: posts.id, title: posts.title })
-            .from(posts)
-            .where(and(...conds))
-            .orderBy(asc(posts.createdAt));
-          const idx = siblings.findIndex((s) => s.id === post.id);
-          if (idx > 0) prev = siblings[idx - 1];
-          if (idx >= 0 && idx < siblings.length - 1) next = siblings[idx + 1];
+      <ArticleViewer
+        key={post.id}
+        html={post.content}
+        title={post.title}
+        authorName={user.displayName}
+        prevHref={
+          prevSibling ? `/u/${user.username}/${prevSibling.id}` : null
         }
-        return (
-          <ArticleViewer
-            key={post.id}
-            html={post.content}
-            title={post.title}
-            authorName={user.displayName}
-            prevHref={prev ? `/u/${user.username}/${prev.id}` : null}
-            prevTitle={prev?.title ?? null}
-            nextHref={next ? `/u/${user.username}/${next.id}` : null}
-            nextTitle={next?.title ?? null}
-          />
-        );
-      })()}
+        prevTitle={prevSibling?.title ?? null}
+        nextHref={
+          nextSibling ? `/u/${user.username}/${nextSibling.id}` : null
+        }
+        nextTitle={nextSibling?.title ?? null}
+      />
     </article>
   );
 }
