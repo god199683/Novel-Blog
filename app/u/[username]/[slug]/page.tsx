@@ -20,9 +20,23 @@ export default async function PostPage({
   });
   if (!user) notFound();
 
-  const post = await db.query.posts.findFirst({
+  // Look up by slug, then NFC-normalized slug, then by post id as a last resort
+  let post = await db.query.posts.findFirst({
     where: and(eq(posts.authorId, user.id), eq(posts.slug, slug)),
   });
+  if (!post) {
+    const normalized = slug.normalize("NFC");
+    if (normalized !== slug) {
+      post = await db.query.posts.findFirst({
+        where: and(eq(posts.authorId, user.id), eq(posts.slug, normalized)),
+      });
+    }
+  }
+  if (!post) {
+    post = await db.query.posts.findFirst({
+      where: and(eq(posts.authorId, user.id), eq(posts.id, slug)),
+    });
+  }
   if (!post) notFound();
 
   const cookieStore = await cookies();

@@ -32,6 +32,10 @@ export default function PostActions({ postId, title, published }: Props) {
   const toggle = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (published) {
+      if (!confirm(`'${title}' 글을 비공개로 전환할까요? (다른 사람은 볼 수 없게 됩니다)`))
+        return;
+    }
     setBusy(true);
     try {
       const res = await fetch(`/api/posts/${postId}`, {
@@ -54,14 +58,18 @@ export default function PostActions({ postId, title, published }: Props) {
         type="button"
         onClick={toggle}
         disabled={busy}
-        title={published ? "비공개로 전환" : "공개로 전환"}
+        title={
+          published
+            ? "현재 공개됨 — 클릭하면 비공개로 전환"
+            : "현재 비공개 — 클릭하면 공개로 전환"
+        }
         className={`rounded-full border px-2 py-1 text-xs disabled:opacity-50 ${
           published
             ? "border-sky-200 text-slate-600 hover:border-brand hover:text-brand"
             : "border-amber-200 bg-amber-50 text-amber-700 hover:border-amber-400"
         }`}
       >
-        {published ? "공개" : "비공개"}
+        {published ? "🌐 공개" : "🔒 비공개"}
       </button>
       <Link
         href={`/edit/${postId}`}
