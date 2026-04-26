@@ -10,6 +10,7 @@ type Props = {
     title: string;
     content: string;
     category: string | null;
+    folderId?: string | null;
   };
 };
 
@@ -18,8 +19,11 @@ export default function PostForm({ initial }: Props) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const [content, setContent] = useState(initial?.content ?? "");
   const [category, setCategory] = useState(initial?.category ?? "");
+  const [folderId, setFolderId] = useState<string>(initial?.folderId ?? "");
   const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
+  const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
   const [newCat, setNewCat] = useState("");
+  const [newFolder, setNewFolder] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,6 +31,9 @@ export default function PostForm({ initial }: Props) {
     fetch("/api/categories")
       .then((r) => r.json())
       .then((d) => Array.isArray(d) && setCats(d));
+    fetch("/api/folders")
+      .then((r) => r.json())
+      .then((d) => Array.isArray(d) && setFolders(d));
   }, []);
 
   const addCategory = async () => {
@@ -60,6 +67,37 @@ export default function PostForm({ initial }: Props) {
     }
   };
 
+  const addFolder = async () => {
+    const name = newFolder.trim();
+    if (!name) return;
+    try {
+      const res = await fetch("/api/folders", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "추가 실패");
+      setFolders((fs) => [...fs, { id: data.id, name: data.name }]);
+      setFolderId(data.id);
+      setNewFolder("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "오류");
+    }
+  };
+
+  const deleteFolder = async (id: string, name: string) => {
+    if (!confirm(`'${name}' 폴더를 삭제할까요? (이 폴더의 글들은 폴더 없음으로 이동합니다)`)) return;
+    try {
+      const res = await fetch(`/api/folders/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("삭제 실패");
+      setFolders((fs) => fs.filter((f) => f.id !== id));
+      if (folderId === id) setFolderId("");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "오류");
+    }
+  };
+
   const submit = async () => {
     if (!title.trim()) {
       setError("제목을 입력해 주세요");
@@ -73,7 +111,12 @@ export default function PostForm({ initial }: Props) {
       const res = await fetch(url, {
         method,
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ title, content, category: category || null }),
+        body: JSON.stringify({
+          title,
+          content,
+          category: category || null,
+          folderId: folderId || null,
+        }),
       });
       if (!res.ok) {
         const j = await res.json().catch(() => ({}));
@@ -176,6 +219,71 @@ export default function PostForm({ initial }: Props) {
           </button>
         </div>
       </div>
+
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-sm text-slate-500">폴더</label>
+          <button
+            type="button"
+            onClick={() => setFolderId("")}
+            className={`rounded-full px-3 py-1 text-xs ${
+              folderId === ""
+                ? "bg-brand text-white"
+                : "border border-sky-200 text-slate-600 hover:border-brand"
+            }`}
+          >
+            폴더 없음
+          </button>
+          {folders.map((f) => (
+            <span
+              key={f.id}
+              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs ${
+                folderId === f.id
+                  ? "bg-brand text-white"
+                  : "border border-sky-200 text-slate-700 hover:border-brand"
+              }`}
+            >
+              <button type="button" onClick={() => setFolderId(f.id)}>
+                📁 {f.name}
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteFolder(f.id, f.name)}
+                className={`ml-1 text-[10px] ${
+                  folderId === f.id ? "text-white/80 hover:text-white" : "text-slate-400 hover:text-red-500"
+                }`}
+                title="삭제"
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={newFolder}
+            onChange={(e) => setNewFolder(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addFolder();
+              }
+            }}
+            placeholder="새 폴더 이름"
+            maxLength={30}
+            className="rounded border border-sky-200 bg-white px-2 py-1 text-sm text-slate-700 outline-none focus:border-brand"
+          />
+          <button
+            type="button"
+            onClick={addFolder}
+            className="rounded-full border border-sky-200 px-3 py-1 text-xs text-slate-700 hover:border-brand hover:text-brand"
+          >
+            + 추가
+          </button>
+        </div>
+      </div>
+
       <Editor initialContent={content} onChange={setContent} />
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="flex items-center justify-end gap-2 pt-2">

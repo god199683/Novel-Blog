@@ -79,9 +79,11 @@ const DEFAULT_FONTS = [
   { label: "Courier New", value: "'Courier New', monospace" },
 ];
 
+type FontEntry = { label: string; value: string };
+type UserFont = { id: string; name: string };
+
 export default function Editor({ initialContent = "", onChange }: Props) {
-  const [fonts, setFonts] = useState(DEFAULT_FONTS);
-  const [systemLoaded, setSystemLoaded] = useState(false);
+  const [userFonts, setUserFonts] = useState<UserFont[]>([]);
 
   const editor = useEditor({
     extensions: [
@@ -108,42 +110,92 @@ export default function Editor({ initialContent = "", onChange }: Props) {
 
   useEffect(() => () => void editor?.destroy(), [editor]);
 
-  const loadSystemFonts = async () => {
-    try {
-      const win = window as unknown as {
-        queryLocalFonts?: () => Promise<{ family: string; fullName: string }[]>;
-      };
-      if (!win.queryLocalFonts) {
-        alert(
-          "이 브라우저는 시스템 폰트 불러오기를 지원하지 않아요 (Chrome/Edge에서만 가능)."
+  // Load user's saved fonts on mount
+  useEffect(() => {
+    fetch("/api/fonts")
+      .then((r) => r.json())
+      .then((d) => Array.isArray(d) && setUserFonts(d))
+      .catch(() => {});
+  }, []);
+
+  const addFont = async () => {
+    const win = window as unknown as {
+      queryLocalFonts?: () => Promise<{ family: string; fullName: string }[]>;
+    };
+    let candidate: string | null = null;
+
+    if (win.queryLocalFonts) {
+      try {
+        const list = await win.queryLocalFonts();
+        const families = Array.from(
+          new Set(list.map((f) => f.family))
+        ).sort((a, b) => a.localeCompare(b, "ko"));
+        const sample = families.slice(0, 30).join(", ");
+        candidate = window.prompt(
+          `추가할 글씨체 이름을 입력하세요.\n\n예시 (시스템에서 감지된 일부): ${sample}${
+            families.length > 30 ? "..." : ""
+          }`,
+          ""
         );
-        return;
+      } catch {
+        candidate = window.prompt("추가할 글씨체 이름을 입력하세요 (예: 나눔고딕)", "");
       }
-      const list = await win.queryLocalFonts();
-      const unique = new Map<string, string>();
-      for (const f of list) {
-        if (!unique.has(f.family)) unique.set(f.family, f.family);
-      }
-      const extra = Array.from(unique.keys())
-        .sort((a, b) => a.localeCompare(b, "ko"))
-        .map((name) => ({ label: name, value: `'${name}'` }));
-      setFonts([...DEFAULT_FONTS, { label: "── 시스템 ──", value: "" }, ...extra]);
-      setSystemLoaded(true);
+    } else {
+      candidate = window.prompt(
+        "추가할 글씨체 이름을 입력하세요 (예: 나눔고딕, Arial)",
+        ""
+      );
+    }
+
+    if (!candidate) return;
+    const name = candidate.trim();
+    if (!name) return;
+
+    try {
+      const res = await fetch("/api/fonts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "추가 실패");
+      setUserFonts((fs) => [{ id: data.id, name: data.name }, ...fs]);
     } catch (e) {
-      console.error(e);
-      alert("시스템 폰트 권한이 거부되었어요.");
+      alert(e instanceof Error ? e.message : "오류");
+    }
+  };
+
+  const deleteFont = async (id: string, name: string) => {
+    if (!confirm(`'${name}' 글씨체를 목록에서 지울까요?`)) return;
+    try {
+      const res = await fetch(`/api/fonts/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("삭제 실패");
+      setUserFonts((fs) => fs.filter((f) => f.id !== id));
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "오류");
     }
   };
 
   if (!editor) return <div className="h-64 animate-pulse rounded bg-sky-50" />;
+
+  const fonts: FontEntry[] = [
+    ...DEFAULT_FONTS,
+    ...(userFonts.length > 0
+      ? [
+          { label: "── 내 글씨체 ──", value: "" },
+          ...userFonts.map((f) => ({ label: f.name, value: `'${f.name}'` })),
+        ]
+      : []),
+  ];
 
   return (
     <div className="rounded-xl border border-sky-100 bg-white shadow-sm">
       <Toolbar
         editor={editor}
         fonts={fonts}
-        systemLoaded={systemLoaded}
-        onLoadSystemFonts={loadSystemFonts}
+        userFonts={userFonts}
+        onAddFont={addFont}
+        onDeleteFont={deleteFont}
       />
       <div className="px-4">
         <EditorContent editor={editor} />
@@ -154,12 +206,13 @@ export default function Editor({ initialContent = "", onChange }: Props) {
 
 type ToolbarProps = {
   editor: TiptapEditor;
-  fonts: { label: string; value: string }[];
-  systemLoaded: boolean;
-  onLoadSystemFonts: () => void;
+  fonts: FontEntry[];
+  userFonts: UserFont[];
+  onAddFont: () => void;
+  onDeleteFont: (id: string, name: string) => void;
 };
 
-function Toolbar({ editor, fonts, systemLoaded, onLoadSystemFonts }: ToolbarProps) {
+function Toolbar({ editor, fonts, userFonts, onAddFont, onDeleteFont }: ToolbarProps) {
   const addImage = () => {
     const url = window.prompt("이미지 URL을 입력하세요");
     if (url) editor.chain().focus().setImage({ src: url }).run();
@@ -185,6 +238,23 @@ function Toolbar({ editor, fonts, systemLoaded, onLoadSystemFonts }: ToolbarProp
   const currentSize =
     (editor.getAttributes("textStyle").fontSize as string | undefined) ?? "";
 
+  const removeUserFont = () => {
+    if (userFonts.length === 0) {
+      alert("삭제할 사용자 글씨체가 없어요.");
+      return;
+    }
+    const list = userFonts.map((f, i) => `${i + 1}. ${f.name}`).join("\n");
+    const choice = window.prompt(`삭제할 글씨체 번호를 입력하세요:\n\n${list}`, "");
+    if (!choice) return;
+    const idx = parseInt(choice.trim(), 10) - 1;
+    if (Number.isNaN(idx) || idx < 0 || idx >= userFonts.length) {
+      alert("올바른 번호를 입력해 주세요.");
+      return;
+    }
+    const target = userFonts[idx];
+    onDeleteFont(target.id, target.name);
+  };
+
   return (
     <div className="flex flex-wrap items-center gap-1 border-b border-sky-100 bg-sky-50/30 p-2">
       {/* Font family */}
@@ -199,21 +269,35 @@ function Toolbar({ editor, fonts, systemLoaded, onLoadSystemFonts }: ToolbarProp
         className="rounded border border-sky-200 bg-white px-1 py-1 text-xs text-slate-700"
       >
         <option value="">글씨체</option>
-        {fonts.map((f) => (
-          <option key={f.label} value={f.value} style={{ fontFamily: f.value || undefined }}>
+        {fonts.map((f, i) => (
+          <option
+            key={`${f.label}-${i}`}
+            value={f.value}
+            disabled={f.value === ""}
+            style={{ fontFamily: f.value || undefined }}
+          >
             {f.label}
           </option>
         ))}
       </select>
       <button
         type="button"
-        title={systemLoaded ? "시스템 폰트 불러옴" : "내 컴퓨터의 폰트 불러오기"}
-        onClick={onLoadSystemFonts}
-        disabled={systemLoaded}
-        className="rounded border border-sky-200 px-2 py-1 text-xs text-slate-600 hover:border-brand hover:text-brand disabled:opacity-40"
+        title="원하는 글씨체 추가하기 (저장됨)"
+        onClick={onAddFont}
+        className="rounded border border-sky-200 px-2 py-1 text-xs text-slate-600 hover:border-brand hover:text-brand"
       >
-        {systemLoaded ? "✓ 시스템" : "✨ 시스템 폰트"}
+        ✨ + 폰트
       </button>
+      {userFonts.length > 0 && (
+        <button
+          type="button"
+          title="추가한 글씨체 삭제"
+          onClick={removeUserFont}
+          className="rounded border border-sky-200 px-2 py-1 text-xs text-slate-500 hover:border-red-300 hover:text-red-500"
+        >
+          − 폰트
+        </button>
+      )}
 
       {/* Font size */}
       <select

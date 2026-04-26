@@ -27,6 +27,41 @@ export const users = sqliteTable(
   })
 );
 
+export const folders = sqliteTable(
+  "folders",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    userNameIdx: uniqueIndex("folders_user_name_idx").on(t.userId, t.name),
+  })
+);
+
+export const userFonts = sqliteTable(
+  "user_fonts",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    createdAt: integer("created_at", { mode: "timestamp" })
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => ({
+    userNameIdx: uniqueIndex("user_fonts_user_name_idx").on(t.userId, t.name),
+  })
+);
+
 export const posts = sqliteTable(
   "posts",
   {
@@ -39,6 +74,9 @@ export const posts = sqliteTable(
     content: text("content").notNull(), // Tiptap HTML
     excerpt: text("excerpt"),
     category: text("category"), // 장편/단편/에세이 등
+    folderId: text("folder_id").references(() => folders.id, {
+      onDelete: "set null",
+    }),
     published: integer("published", { mode: "boolean" })
       .notNull()
       .default(true),

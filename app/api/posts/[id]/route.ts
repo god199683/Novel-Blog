@@ -34,6 +34,12 @@ export async function PATCH(
     body.category === null || body.category === ""
       ? null
       : String(body.category);
+  const folderId =
+    body.folderId === undefined
+      ? post.folderId
+      : body.folderId === null || body.folderId === ""
+      ? null
+      : String(body.folderId);
 
   await db
     .update(posts)
@@ -42,6 +48,7 @@ export async function PATCH(
       content,
       excerpt: excerptFromHtml(content),
       category,
+      folderId,
       updatedAt: new Date(),
     })
     .where(eq(posts.id, id));

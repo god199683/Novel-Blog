@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
-import { categories } from "@/lib/db/schema";
+import { folders } from "@/lib/db/schema";
 import { verifySession } from "@/lib/auth";
 import { eq, and } from "drizzle-orm";
 
@@ -15,27 +15,27 @@ export async function PATCH(
   if (!session)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const cat = await db.query.categories.findFirst({
-    where: eq(categories.id, id),
+  const folder = await db.query.folders.findFirst({
+    where: eq(folders.id, id),
   });
-  if (!cat) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (cat.userId !== session.userId)
+  if (!folder) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (folder.userId !== session.userId)
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json().catch(() => null);
   const name = String(body?.name ?? "").trim();
   if (!name || name.length > 30) {
-    return NextResponse.json({ error: "카테고리 이름은 1-30자" }, { status: 400 });
+    return NextResponse.json({ error: "폴더 이름은 1-30자" }, { status: 400 });
   }
 
-  const dup = await db.query.categories.findFirst({
-    where: and(eq(categories.userId, session.userId), eq(categories.name, name)),
+  const dup = await db.query.folders.findFirst({
+    where: and(eq(folders.userId, session.userId), eq(folders.name, name)),
   });
   if (dup && dup.id !== id) {
-    return NextResponse.json({ error: "이미 존재하는 카테고리" }, { status: 409 });
+    return NextResponse.json({ error: "이미 존재하는 폴더" }, { status: 409 });
   }
 
-  await db.update(categories).set({ name }).where(eq(categories.id, id));
+  await db.update(folders).set({ name }).where(eq(folders.id, id));
   return NextResponse.json({ id, name });
 }
 
@@ -49,13 +49,13 @@ export async function DELETE(
   if (!session)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const cat = await db.query.categories.findFirst({
-    where: eq(categories.id, id),
+  const folder = await db.query.folders.findFirst({
+    where: eq(folders.id, id),
   });
-  if (!cat) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (cat.userId !== session.userId)
+  if (!folder) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (folder.userId !== session.userId)
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  await db.delete(categories).where(eq(categories.id, id));
+  await db.delete(folders).where(eq(folders.id, id));
   return NextResponse.json({ ok: true });
 }
