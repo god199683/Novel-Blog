@@ -53,6 +53,13 @@ export default async function RootLayout({
                   >
                     내 글
                   </Link>
+                  <Link
+                    href="/account"
+                    className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
+                    title="계정 설정"
+                  >
+                    설정
+                  </Link>
                   <span className="hidden px-2 text-slate-500 sm:inline">
                     {session.displayName}
                   </span>
