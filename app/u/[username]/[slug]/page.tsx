@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { users, posts } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, asc } from "drizzle-orm";
 import { verifySession } from "@/lib/auth";
 import ArticleViewer from "@/components/ArticleViewer";
 
@@ -113,11 +113,40 @@ export default async function PostPage({
           )}
         </div>
       </header>
-      <ArticleViewer
-        html={post.content}
-        title={post.title}
-        authorName={user.displayName}
-      />
+      {await (async () => {
+        // Find prev/next post within the same folder for book-mode
+        // navigation. Reading order = oldest → newest (chronological,
+        // matches how serialized novels are written chapter by chapter).
+        let prev: { id: string; title: string } | null = null;
+        let next: { id: string; title: string } | null = null;
+        if (post.folderId) {
+          const conds = [
+            eq(posts.authorId, user.id),
+            eq(posts.folderId, post.folderId),
+          ];
+          if (!isOwner) conds.push(eq(posts.published, true));
+          const siblings = await db
+            .select({ id: posts.id, title: posts.title })
+            .from(posts)
+            .where(and(...conds))
+            .orderBy(asc(posts.createdAt));
+          const idx = siblings.findIndex((s) => s.id === post.id);
+          if (idx > 0) prev = siblings[idx - 1];
+          if (idx >= 0 && idx < siblings.length - 1) next = siblings[idx + 1];
+        }
+        return (
+          <ArticleViewer
+            key={post.id}
+            html={post.content}
+            title={post.title}
+            authorName={user.displayName}
+            prevHref={prev ? `/u/${user.username}/${prev.id}` : null}
+            prevTitle={prev?.title ?? null}
+            nextHref={next ? `/u/${user.username}/${next.id}` : null}
+            nextTitle={next?.title ?? null}
+          />
+        );
+      })()}
     </article>
   );
 }
