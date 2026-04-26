@@ -28,10 +28,18 @@ export default async function PostPage({
   const session = await verifySession(cookieStore.get("session")?.value);
   const isOwner = session?.userId === user.id;
 
+  // Hide unpublished posts from non-owner viewers
+  if (!post.published && !isOwner) notFound();
+
   return (
     <article className="mx-auto max-w-3xl">
       <header className="mb-8 border-b border-sky-100 pb-6">
         <div className="mb-3 flex items-center gap-2 text-xs text-slate-500">
+          {!post.published && (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700">
+              비공개
+            </span>
+          )}
           {post.category && (
             <span className="rounded-full bg-brand-light px-2 py-0.5 text-brand-dark">
               {post.category}

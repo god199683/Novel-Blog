@@ -51,6 +51,11 @@ export default async function DashboardPage() {
                 className="flex-1"
               >
                 <div className="flex items-center gap-2 text-xs text-slate-500">
+                  {!p.published && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700">
+                      비공개
+                    </span>
+                  )}
                   {p.category && (
                     <span className="rounded-full bg-brand-light px-2 py-0.5 text-brand-dark">
                       {p.category}

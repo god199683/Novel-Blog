@@ -30,6 +30,7 @@ export default async function EditPage({
           content: post.content,
           category: post.category,
           folderId: post.folderId,
+          published: post.published,
         }}
       />
     </div>

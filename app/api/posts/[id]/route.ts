@@ -40,6 +40,8 @@ export async function PATCH(
       : body.folderId === null || body.folderId === ""
       ? null
       : String(body.folderId);
+  const published =
+    body.published === undefined ? post.published : Boolean(body.published);
 
   await db
     .update(posts)
@@ -49,6 +51,7 @@ export async function PATCH(
       excerpt: excerptFromHtml(content),
       category,
       folderId,
+      published,
       updatedAt: new Date(),
     })
     .where(eq(posts.id, id));

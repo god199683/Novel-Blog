@@ -51,6 +51,59 @@ const FontSize = Extension.create({
   },
 });
 
+// Custom LineHeight extension — applied to block-level nodes (paragraph, headings)
+const LineHeight = Extension.create({
+  name: "lineHeight",
+  addOptions() {
+    return { types: ["paragraph", "heading"] };
+  },
+  addGlobalAttributes() {
+    return [
+      {
+        types: this.options.types,
+        attributes: {
+          lineHeight: {
+            default: null,
+            parseHTML: (el) => (el as HTMLElement).style.lineHeight || null,
+            renderHTML: (attrs) =>
+              attrs.lineHeight ? { style: `line-height: ${attrs.lineHeight}` } : {},
+          },
+        },
+      },
+    ];
+  },
+  addCommands() {
+    return {
+      setLineHeight:
+        (value: string) =>
+        ({
+          commands,
+        }: {
+          commands: {
+            updateAttributes: (type: string, attrs: object) => boolean;
+          };
+        }) => {
+          return (this.options.types as string[]).every((type) =>
+            commands.updateAttributes(type, { lineHeight: value })
+          );
+        },
+      unsetLineHeight:
+        () =>
+        ({
+          commands,
+        }: {
+          commands: {
+            resetAttributes: (type: string, attrs: string) => boolean;
+          };
+        }) => {
+          return (this.options.types as string[]).every((type) =>
+            commands.resetAttributes(type, "lineHeight")
+          );
+        },
+    } as never;
+  },
+});
+
 const FONT_SIZES = [
   { label: "매우 작게", value: "12px" },
   { label: "작게", value: "14px" },
@@ -58,6 +111,15 @@ const FONT_SIZES = [
   { label: "크게", value: "20px" },
   { label: "아주 크게", value: "24px" },
   { label: "크게·크게", value: "32px" },
+];
+
+const LINE_HEIGHTS = [
+  { label: "좁게", value: "1" },
+  { label: "조금 좁게", value: "1.25" },
+  { label: "보통", value: "1.5" },
+  { label: "조금 넓게", value: "1.75" },
+  { label: "넓게", value: "2" },
+  { label: "아주 넓게", value: "2.5" },
 ];
 
 const DEFAULT_FONTS = [
@@ -99,6 +161,7 @@ export default function Editor({ initialContent = "", onChange }: Props) {
       TextStyle,
       FontFamily.configure({ types: ["textStyle"] }),
       FontSize,
+      LineHeight,
     ],
     content: initialContent,
     immediatelyRender: false,
@@ -237,6 +300,10 @@ function Toolbar({ editor, fonts, userFonts, onAddFont, onDeleteFont }: ToolbarP
     (editor.getAttributes("textStyle").fontFamily as string | undefined) ?? "";
   const currentSize =
     (editor.getAttributes("textStyle").fontSize as string | undefined) ?? "";
+  const currentLineHeight =
+    (editor.getAttributes("paragraph").lineHeight as string | undefined) ??
+    (editor.getAttributes("heading").lineHeight as string | undefined) ??
+    "";
 
   const removeUserFont = () => {
     if (userFonts.length === 0) {
@@ -312,6 +379,25 @@ function Toolbar({ editor, fonts, userFonts, onAddFont, onDeleteFont }: ToolbarP
       >
         <option value="">크기</option>
         {FONT_SIZES.map((s) => (
+          <option key={s.value} value={s.value}>
+            {s.label} ({s.value})
+          </option>
+        ))}
+      </select>
+
+      {/* Line height */}
+      <select
+        title="줄 간격"
+        value={currentLineHeight}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (!v) (editor.chain().focus() as unknown as { unsetLineHeight: () => { run: () => void } }).unsetLineHeight().run();
+          else (editor.chain().focus() as unknown as { setLineHeight: (s: string) => { run: () => void } }).setLineHeight(v).run();
+        }}
+        className="rounded border border-sky-200 bg-white px-1 py-1 text-xs text-slate-700"
+      >
+        <option value="">줄간격</option>
+        {LINE_HEIGHTS.map((s) => (
           <option key={s.value} value={s.value}>
             {s.label} ({s.value})
           </option>

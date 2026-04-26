@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
     body.folderId === null || body.folderId === "" || body.folderId === undefined
       ? null
       : String(body.folderId);
+  const published = body.published === undefined ? true : Boolean(body.published);
 
   if (!title) return NextResponse.json({ error: "제목을 입력해 주세요" }, { status: 400 });
 
@@ -53,7 +54,7 @@ export async function POST(req: NextRequest) {
     excerpt: excerptFromHtml(content),
     category,
     folderId,
-    published: true,
+    published,
     createdAt: now,
     updatedAt: now,
   });

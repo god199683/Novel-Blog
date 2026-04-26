@@ -11,6 +11,7 @@ type Props = {
     content: string;
     category: string | null;
     folderId?: string | null;
+    published?: boolean;
   };
 };
 
@@ -20,6 +21,7 @@ export default function PostForm({ initial }: Props) {
   const [content, setContent] = useState(initial?.content ?? "");
   const [category, setCategory] = useState(initial?.category ?? "");
   const [folderId, setFolderId] = useState<string>(initial?.folderId ?? "");
+  const [published, setPublished] = useState<boolean>(initial?.published ?? true);
   const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
   const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
   const [newCat, setNewCat] = useState("");
@@ -116,6 +118,7 @@ export default function PostForm({ initial }: Props) {
           content,
           category: category || null,
           folderId: folderId || null,
+          published,
         }),
       });
       if (!res.ok) {
@@ -286,25 +289,58 @@ export default function PostForm({ initial }: Props) {
 
       <Editor initialContent={content} onChange={setContent} />
       {error && <p className="text-sm text-red-600">{error}</p>}
-      <div className="flex items-center justify-end gap-2 pt-2">
-        {initial?.id && (
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-slate-500">공개 설정</span>
           <button
             type="button"
-            onClick={remove}
-            disabled={saving}
-            className="rounded px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+            onClick={() => setPublished(true)}
+            className={`rounded-full px-3 py-1 text-xs ${
+              published
+                ? "bg-brand text-white"
+                : "border border-sky-200 text-slate-600 hover:border-brand"
+            }`}
           >
-            삭제
+            🌐 공개
           </button>
-        )}
-        <button
-          type="button"
-          onClick={submit}
-          disabled={saving}
-          className="rounded-full bg-brand px-6 py-2 font-medium text-white hover:bg-brand-dark disabled:opacity-50"
-        >
-          {saving ? "저장 중..." : initial?.id ? "수정" : "발행"}
-        </button>
+          <button
+            type="button"
+            onClick={() => setPublished(false)}
+            className={`rounded-full px-3 py-1 text-xs ${
+              !published
+                ? "bg-amber-500 text-white"
+                : "border border-sky-200 text-slate-600 hover:border-amber-400"
+            }`}
+          >
+            🔒 비공개
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          {initial?.id && (
+            <button
+              type="button"
+              onClick={remove}
+              disabled={saving}
+              className="rounded px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+            >
+              삭제
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={submit}
+            disabled={saving}
+            className="rounded-full bg-brand px-6 py-2 font-medium text-white hover:bg-brand-dark disabled:opacity-50"
+          >
+            {saving
+              ? "저장 중..."
+              : initial?.id
+              ? "수정"
+              : published
+              ? "발행"
+              : "비공개로 저장"}
+          </button>
+        </div>
       </div>
     </div>
   );

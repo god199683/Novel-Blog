@@ -6,6 +6,7 @@ import { users, posts, categories, folders } from "@/lib/db/schema";
 import { desc, eq, and, asc } from "drizzle-orm";
 import { verifySession } from "@/lib/auth";
 import BlogSidebar from "@/components/BlogSidebar";
+import PostActions from "@/components/PostActions";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,8 @@ export default async function UserBlogPage({
       .orderBy(asc(folders.sortOrder), desc(folders.createdAt)),
   ]);
 
-  const conditions = [eq(posts.authorId, user.id), eq(posts.published, true)];
+  const conditions = [eq(posts.authorId, user.id)];
+  if (!isOwner) conditions.push(eq(posts.published, true));
   if (selectedCategory) conditions.push(eq(posts.category, selectedCategory));
   if (selectedFolder) conditions.push(eq(posts.folderId, selectedFolder));
 
@@ -101,12 +103,17 @@ export default async function UserBlogPage({
               {rows.map((p) => {
                 const folder = p.folderId ? fls.find((f) => f.id === p.folderId) : null;
                 return (
-                  <li key={p.id} className="py-5">
+                  <li key={p.id} className="flex items-start justify-between gap-4 py-5">
                     <Link
                       href={`/u/${user.username}/${p.slug}`}
-                      className="block group"
+                      className="block flex-1 group"
                     >
                       <div className="flex items-center gap-2 text-xs text-slate-500">
+                        {!p.published && (
+                          <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700">
+                            비공개
+                          </span>
+                        )}
                         {p.category && (
                           <span className="rounded-full bg-brand-light px-2 py-0.5 text-brand-dark">
                             {p.category}
@@ -128,6 +135,13 @@ export default async function UserBlogPage({
                         </p>
                       )}
                     </Link>
+                    {isOwner && (
+                      <PostActions
+                        postId={p.id}
+                        title={p.title}
+                        published={p.published}
+                      />
+                    )}
                   </li>
                 );
               })}
