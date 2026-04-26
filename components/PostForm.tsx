@@ -126,11 +126,11 @@ export default function PostForm({ initial }: Props) {
         throw new Error(j.error || "저장 실패");
       }
       const data = await res.json();
-      // Normalize Hangul in the slug to NFC so the post page lookup
-      // (which also normalizes) always matches what we just stored.
-      const slugForUrl = String(data.slug ?? "").normalize("NFC");
-      router.push(`/u/${data.authorUsername}/${slugForUrl}`);
+      // Use the post id (ASCII nanoid) for the post-save redirect to
+      // avoid any URL/Hangul normalization mismatch. The post page
+      // route already resolves either slug or id to the same post.
       router.refresh();
+      router.push(`/u/${data.authorUsername}/${data.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "오류");
     } finally {

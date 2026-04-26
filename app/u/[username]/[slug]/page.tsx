@@ -39,14 +39,40 @@ export default async function PostPage({
       where: and(eq(posts.authorId, user.id), eq(posts.id, slug)),
     });
   }
-  if (!post) notFound();
+  if (!post) {
+    // Helps diagnose 404s in production logs (Netlify function logs).
+    console.warn(
+      "[post-lookup] not-found username=%s slugLen=%d slugHex=%s",
+      username,
+      slug.length,
+      Buffer.from(slug, "utf8").toString("hex")
+    );
+    notFound();
+  }
 
   const cookieStore = await cookies();
   const session = await verifySession(cookieStore.get("session")?.value);
   const isOwner = session?.userId === user.id;
 
-  // Hide unpublished posts from non-owner viewers
-  if (!post.published && !isOwner) notFound();
+  // Surface a clear message rather than a generic 404 when the post
+  // exists but is private — this also tells us the cookie/session
+  // round-trip is working when the owner sees their own private post.
+  if (!post.published && !isOwner) {
+    return (
+      <div className="mx-auto max-w-md py-20 text-center">
+        <h1 className="text-xl font-bold text-slate-900">비공개 글이에요</h1>
+        <p className="mt-2 text-sm text-slate-500">
+          이 글은 작성자만 볼 수 있어요.
+        </p>
+        <Link
+          href={`/u/${user.username}`}
+          className="mt-6 inline-block text-sm text-brand hover:underline"
+        >
+          {user.displayName}님의 블로그로 →
+        </Link>
+      </div>
+    );
+  }
 
   return (
     <article className="mx-auto max-w-3xl">
