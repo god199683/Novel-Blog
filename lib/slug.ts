@@ -8,11 +8,13 @@ export function makeId(): string {
 
 export function slugify(input: string): string {
   const cleaned = input
+    .normalize("NFC") // unify Hangul/Latin composition before storage
     .trim()
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s-]/gu, "")
     .replace(/\s+/g, "-")
     .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "")
     .slice(0, 60);
   return cleaned || nano();
 }

@@ -20,19 +20,21 @@ export default async function PostPage({
   });
   if (!user) notFound();
 
-  // Look up by slug, then NFC-normalized slug, then by post id as a last resort
-  let post = await db.query.posts.findFirst({
-    where: and(eq(posts.authorId, user.id), eq(posts.slug, slug)),
-  });
-  if (!post) {
-    const normalized = slug.normalize("NFC");
-    if (normalized !== slug) {
-      post = await db.query.posts.findFirst({
-        where: and(eq(posts.authorId, user.id), eq(posts.slug, normalized)),
-      });
-    }
+  // Try multiple lookup strategies because URL/DB Hangul normalization
+  // (NFC vs NFD) can disagree — the IME may store decomposed jamo while
+  // the URL gets canonicalized to NFC by the browser/CDN, or vice versa.
+  const candidates = Array.from(
+    new Set([slug, slug.normalize("NFC"), slug.normalize("NFD")])
+  );
+  let post: typeof posts.$inferSelect | undefined;
+  for (const s of candidates) {
+    post = await db.query.posts.findFirst({
+      where: and(eq(posts.authorId, user.id), eq(posts.slug, s)),
+    });
+    if (post) break;
   }
   if (!post) {
+    // Final fallback: treat slug as a post id (for legacy or odd cases)
     post = await db.query.posts.findFirst({
       where: and(eq(posts.authorId, user.id), eq(posts.id, slug)),
     });

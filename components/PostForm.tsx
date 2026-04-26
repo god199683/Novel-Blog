@@ -126,7 +126,10 @@ export default function PostForm({ initial }: Props) {
         throw new Error(j.error || "저장 실패");
       }
       const data = await res.json();
-      router.push(`/u/${data.authorUsername}/${data.slug}`);
+      // Normalize Hangul in the slug to NFC so the post page lookup
+      // (which also normalizes) always matches what we just stored.
+      const slugForUrl = String(data.slug ?? "").normalize("NFC");
+      router.push(`/u/${data.authorUsername}/${slugForUrl}`);
       router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "오류");
