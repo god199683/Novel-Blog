@@ -1,3 +1,7 @@
+// HashRouter 안에서만 라우팅하므로 이 파일은 거의 호출되지 않지만,
+// Next.js 정적 export가 요구하므로 안전한 폴백을 둠.
+"use client";
+
 import Link from "next/link";
 
 export default function NotFound() {

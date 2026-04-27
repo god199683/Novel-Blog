@@ -1,81 +1,51 @@
-import Link from "next/link";
-import { db } from "@/lib/db";
-import { posts, users } from "@/lib/db/schema";
-import { desc, eq } from "drizzle-orm";
+"use client";
 
-export const dynamic = "force-dynamic";
+import { useEffect, useState } from "react";
+import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "@/lib/AuthContext";
+import AppShell from "@/components/views/AppShell";
+import HomeView from "@/components/views/HomeView";
+import LoginView from "@/components/views/LoginView";
+import SignupView from "@/components/views/SignupView";
+import DashboardView from "@/components/views/DashboardView";
+import WriteView from "@/components/views/WriteView";
+import EditView from "@/components/views/EditView";
+import UserBlogView from "@/components/views/UserBlogView";
+import UserPostView from "@/components/views/UserPostView";
+import AccountView from "@/components/views/AccountView";
 
-export default async function HomePage() {
-  const rows = await db
-    .select({
-      id: posts.id,
-      title: posts.title,
-      slug: posts.slug,
-      excerpt: posts.excerpt,
-      category: posts.category,
-      createdAt: posts.createdAt,
-      authorUsername: users.username,
-      authorDisplayName: users.displayName,
-    })
-    .from(posts)
-    .innerJoin(users, eq(posts.authorId, users.id))
-    .where(eq(posts.published, true))
-    .orderBy(desc(posts.createdAt))
-    .limit(30);
+export default function Page() {
+  // HashRouter touches `document` on construction, which isn't available
+  // during static prerender. Defer the whole app to client-side mount.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (!mounted) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center text-slate-400 text-sm">
+        불러오는 중...
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <section className="mb-10">
-        <h1 className="text-3xl font-bold text-slate-900">최신 이야기</h1>
-        <p className="mt-2 text-slate-500">여러 작가의 소설과 에세이</p>
-      </section>
-
-      {rows.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-sky-200 bg-white/60 p-10 text-center text-slate-500">
-          아직 작성된 글이 없어요.{" "}
-          <Link href="/signup" className="text-brand underline">
-            첫 글을 써보세요
-          </Link>
-        </div>
-      ) : (
-        <ul className="grid gap-4 sm:grid-cols-2">
-          {rows.map((p) => (
-            <li
-              key={p.id}
-              className="group rounded-xl border border-sky-100 bg-white p-5 shadow-sm transition hover:border-brand hover:shadow-md"
-            >
-              <Link href={`/u/${p.authorUsername}/${p.slug}`} className="block">
-                {p.category && (
-                  <span className="mb-2 inline-block rounded-full bg-brand-light px-2 py-0.5 text-xs text-brand-dark">
-                    {p.category}
-                  </span>
-                )}
-                <h2 className="text-xl font-bold text-slate-900 group-hover:text-brand">
-                  {p.title}
-                </h2>
-                {p.excerpt && (
-                  <p className="mt-2 line-clamp-2 text-sm text-slate-600">
-                    {p.excerpt}
-                  </p>
-                )}
-              </Link>
-              <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                <Link
-                  href={`/u/${p.authorUsername}`}
-                  className="hover:text-brand"
-                >
-                  {p.authorDisplayName}
-                </Link>
-                <time>{formatDate(p.createdAt)}</time>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <AuthProvider>
+      <HashRouter>
+        <AppShell>
+          <Routes>
+            <Route path="/" element={<HomeView />} />
+            <Route path="/login" element={<LoginView />} />
+            <Route path="/signup" element={<SignupView />} />
+            <Route path="/dashboard" element={<DashboardView />} />
+            <Route path="/write" element={<WriteView />} />
+            <Route path="/edit/:id" element={<EditView />} />
+            <Route path="/account" element={<AccountView />} />
+            <Route path="/u/:username" element={<UserBlogView />} />
+            <Route path="/u/:username/:idOrSlug" element={<UserPostView />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AppShell>
+      </HashRouter>
+    </AuthProvider>
   );
-}
-
-function formatDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
 }

@@ -8,7 +8,7 @@ export function makeId(): string {
 
 export function slugify(input: string): string {
   const cleaned = input
-    .normalize("NFC") // unify Hangul/Latin composition before storage
+    .normalize("NFC")
     .trim()
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\s-]/gu, "")
@@ -19,12 +19,12 @@ export function slugify(input: string): string {
   return cleaned || nano();
 }
 
-export function withSuffix(slug: string): string {
-  return `${slug}-${nano().slice(0, 5)}`;
-}
-
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
-
 export function validateUsername(u: string): boolean {
   return USERNAME_RE.test(u);
+}
+
+export function excerptFromHtml(html: string, n = 160): string {
+  const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  return text.length > n ? text.slice(0, n) + "…" : text;
 }

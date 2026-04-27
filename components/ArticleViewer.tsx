@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 type Props = {
   html: string;
@@ -32,7 +32,7 @@ export default function ArticleViewer({
   nextHref,
   nextTitle,
 }: Props) {
-  const router = useRouter();
+  const nav = useNavigate();
   const [book, setBook] = useState(false);
   const [page, setPage] = useState(0);
   const [pageCount, setPageCount] = useState(1);
@@ -42,7 +42,6 @@ export default function ArticleViewer({
   const pagesRef = useRef<HTMLDivElement>(null);
   const [stageW, setStageW] = useState(0);
 
-  // Load saved prefs + restore book mode across post navigation
   useEffect(() => {
     const fs = window.localStorage.getItem(FS_KEY);
     if (fs) {
@@ -73,7 +72,6 @@ export default function ArticleViewer({
     } catch {}
   };
 
-  // Track stage size
   useEffect(() => {
     if (!book || !stageRef.current) return;
     const el = stageRef.current;
@@ -84,7 +82,6 @@ export default function ArticleViewer({
     return () => ro.disconnect();
   }, [book]);
 
-  // Recompute page count after layout
   useEffect(() => {
     if (!book) return;
     const t = setTimeout(() => {
@@ -99,16 +96,14 @@ export default function ArticleViewer({
     return () => clearTimeout(t);
   }, [book, fontSize, fontFamily, stageW, html]);
 
-  // Boundary-aware navigation: at last page, "next" jumps to the next
-  // post within the folder; at first page, "prev" jumps to the prior.
   const jumpToSibling = useCallback(
     (href: string) => {
       try {
         window.sessionStorage.setItem(BOOK_KEY, "1");
       } catch {}
-      router.push(href);
+      nav(href);
     },
-    [router]
+    [nav]
   );
 
   const goNext = useCallback(() => {
@@ -127,7 +122,6 @@ export default function ArticleViewer({
     });
   }, [prevHref, jumpToSibling]);
 
-  // Keyboard nav
   useEffect(() => {
     if (!book) return;
     const onKey = (e: KeyboardEvent) => {
@@ -149,7 +143,6 @@ export default function ArticleViewer({
     return () => window.removeEventListener("keydown", onKey);
   }, [book, pageCount, goNext, goPrev]);
 
-  // Lock body scroll
   useEffect(() => {
     if (book) {
       const prev = document.body.style.overflow;
@@ -160,7 +153,6 @@ export default function ArticleViewer({
     }
   }, [book]);
 
-  // Touch swipe
   useEffect(() => {
     if (!book || !stageRef.current) return;
     const el = stageRef.current;
@@ -236,16 +228,16 @@ export default function ArticleViewer({
           <button
             type="button"
             onClick={() => setFontSize((s) => Math.max(12, s - 1))}
-            title="글자 작게"
             className="rounded px-2 py-1 hover:bg-amber-100"
           >
             A−
           </button>
-          <span className="w-10 text-center text-xs text-stone-500">{fontSize}px</span>
+          <span className="w-10 text-center text-xs text-stone-500">
+            {fontSize}px
+          </span>
           <button
             type="button"
             onClick={() => setFontSize((s) => Math.min(28, s + 1))}
-            title="글자 크게"
             className="rounded px-2 py-1 hover:bg-amber-100"
           >
             A+
@@ -253,7 +245,6 @@ export default function ArticleViewer({
           <button
             type="button"
             onClick={closeBook}
-            title="닫기 (Esc)"
             className="ml-2 rounded px-2 py-1 hover:bg-amber-100"
           >
             ✕
@@ -262,20 +253,19 @@ export default function ArticleViewer({
       </header>
 
       <div ref={stageRef} className="relative flex-1 overflow-hidden">
-        {/* Click zones */}
         <button
           type="button"
           onClick={goPrev}
           disabled={!canGoPrev}
-          aria-label="이전 페이지"
           className="absolute inset-y-0 left-0 z-10 w-1/3 cursor-w-resize disabled:cursor-default"
+          aria-label="이전"
         />
         <button
           type="button"
           onClick={goNext}
           disabled={!canGoNext}
-          aria-label="다음 페이지"
           className="absolute inset-y-0 right-0 z-10 w-1/3 cursor-e-resize disabled:cursor-default"
+          aria-label="다음"
         />
 
         {stageW > 0 && (
@@ -313,7 +303,6 @@ export default function ArticleViewer({
           type="button"
           onClick={goPrev}
           disabled={!canGoPrev}
-          aria-label={atFirst && prevHref ? `이전편: ${prevTitle ?? ""}` : "이전"}
           title={
             atFirst && prevHref
               ? `이전편으로: ${prevTitle ?? ""}`
@@ -327,7 +316,6 @@ export default function ArticleViewer({
           type="button"
           onClick={goNext}
           disabled={!canGoNext}
-          aria-label={atLast && nextHref ? `다음편: ${nextTitle ?? ""}` : "다음"}
           title={
             atLast && nextHref
               ? `다음편으로: ${nextTitle ?? ""}`

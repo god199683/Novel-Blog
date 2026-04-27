@@ -175,10 +175,20 @@ export default function Editor({ initialContent = "", onChange }: Props) {
 
   // Load user's saved fonts on mount
   useEffect(() => {
-    fetch("/api/fonts")
-      .then((r) => r.json())
-      .then((d) => Array.isArray(d) && setUserFonts(d))
-      .catch(() => {});
+    (async () => {
+      const { supabase } = await import("@/lib/supabase");
+      const sb = supabase();
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
+      if (!user) return;
+      const { data } = await sb
+        .from("user_fonts")
+        .select("id,name")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (Array.isArray(data)) setUserFonts(data as { id: string; name: string }[]);
+    })().catch(() => {});
   }, []);
 
   const addFont = async () => {
@@ -215,14 +225,22 @@ export default function Editor({ initialContent = "", onChange }: Props) {
     if (!name) return;
 
     try {
-      const res = await fetch("/api/fonts", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "추가 실패");
-      setUserFonts((fs) => [{ id: data.id, name: data.name }, ...fs]);
+      const { supabase } = await import("@/lib/supabase");
+      const sb = supabase();
+      const {
+        data: { user },
+      } = await sb.auth.getUser();
+      if (!user) throw new Error("로그인이 필요합니다");
+      const { data, error } = await sb
+        .from("user_fonts")
+        .insert({ user_id: user.id, name })
+        .select()
+        .single();
+      if (error) throw new Error(error.message);
+      setUserFonts((fs) => [
+        { id: (data as { id: string }).id, name: (data as { name: string }).name },
+        ...fs,
+      ]);
     } catch (e) {
       alert(e instanceof Error ? e.message : "오류");
     }
@@ -231,8 +249,9 @@ export default function Editor({ initialContent = "", onChange }: Props) {
   const deleteFont = async (id: string, name: string) => {
     if (!confirm(`'${name}' 글씨체를 목록에서 지울까요?`)) return;
     try {
-      const res = await fetch(`/api/fonts/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("삭제 실패");
+      const { supabase } = await import("@/lib/supabase");
+      const { error } = await supabase().from("user_fonts").delete().eq("id", id);
+      if (error) throw new Error(error.message);
       setUserFonts((fs) => fs.filter((f) => f.id !== id));
     } catch (e) {
       alert(e instanceof Error ? e.message : "오류");

@@ -1,17 +1,17 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { supabase } from "@/lib/supabase";
 
 type Props = {
   postId: string;
   title: string;
   published: boolean;
+  onChanged?: (action: "deleted" | "toggled") => void;
 };
 
-export default function PostActions({ postId, title, published }: Props) {
-  const router = useRouter();
+export default function PostActions({ postId, title, published, onChanged }: Props) {
   const [busy, setBusy] = useState(false);
 
   const remove = async (e: React.MouseEvent) => {
@@ -19,37 +19,32 @@ export default function PostActions({ postId, title, published }: Props) {
     e.stopPropagation();
     if (!confirm(`'${title}' 글을 정말 삭제할까요?`)) return;
     setBusy(true);
-    try {
-      const res = await fetch(`/api/posts/${postId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("삭제 실패");
-      router.refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "오류");
-      setBusy(false);
+    const { error } = await supabase().from("posts").delete().eq("id", postId);
+    setBusy(false);
+    if (error) {
+      alert(error.message);
+      return;
     }
+    onChanged?.("deleted");
   };
 
   const toggle = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     if (published) {
-      if (!confirm(`'${title}' 글을 비공개로 전환할까요? (다른 사람은 볼 수 없게 됩니다)`))
-        return;
+      if (!confirm(`'${title}' 글을 비공개로 전환할까요?`)) return;
     }
     setBusy(true);
-    try {
-      const res = await fetch(`/api/posts/${postId}`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ published: !published }),
-      });
-      if (!res.ok) throw new Error("변경 실패");
-      router.refresh();
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "오류");
-    } finally {
-      setBusy(false);
+    const { error } = await supabase()
+      .from("posts")
+      .update({ published: !published })
+      .eq("id", postId);
+    setBusy(false);
+    if (error) {
+      alert(error.message);
+      return;
     }
+    onChanged?.("toggled");
   };
 
   return (
@@ -60,8 +55,8 @@ export default function PostActions({ postId, title, published }: Props) {
         disabled={busy}
         title={
           published
-            ? "현재 공개됨 — 클릭하면 비공개로 전환"
-            : "현재 비공개 — 클릭하면 공개로 전환"
+            ? "현재 공개됨 — 클릭하면 비공개"
+            : "현재 비공개 — 클릭하면 공개"
         }
         className={`rounded-full border px-2 py-1 text-xs disabled:opacity-50 ${
           published
@@ -72,7 +67,7 @@ export default function PostActions({ postId, title, published }: Props) {
         {published ? "🌐 공개" : "🔒 비공개"}
       </button>
       <Link
-        href={`/edit/${postId}`}
+        to={`/edit/${postId}`}
         onClick={(e) => e.stopPropagation()}
         className="rounded-full border border-sky-200 px-2 py-1 text-xs text-slate-700 hover:border-brand hover:text-brand"
       >

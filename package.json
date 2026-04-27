@@ -5,13 +5,11 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "postbuild": "node scripts/postbuild-pages.mjs",
+    "start": "next start"
   },
   "dependencies": {
-    "@libsql/client": "^0.14.0",
+    "@supabase/supabase-js": "^2.104.1",
     "@tiptap/extension-font-family": "^2.27.2",
     "@tiptap/extension-image": "^2.10.3",
     "@tiptap/extension-link": "^2.10.3",
@@ -21,21 +19,18 @@
     "@tiptap/pm": "^2.10.3",
     "@tiptap/react": "^2.10.3",
     "@tiptap/starter-kit": "^2.10.3",
-    "bcryptjs": "^2.4.3",
-    "drizzle-orm": "^0.36.4",
-    "jose": "^5.9.6",
+    "@types/react-router-dom": "^5.3.3",
     "nanoid": "^5.0.9",
     "next": "^15.1.6",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.14.2"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.10.1",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.20",
-    "drizzle-kit": "^0.28.1",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.15",
     "typescript": "^5.7.2"

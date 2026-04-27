@@ -1,23 +1,16 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import { cookies } from "next/headers";
 import "./globals.css";
-import { verifySession } from "@/lib/auth";
-import LogoutButton from "@/components/LogoutButton";
 
 export const metadata: Metadata = {
   title: "Novel Blog",
   description: "소설 블로그",
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const cookieStore = await cookies();
-  const session = await verifySession(cookieStore.get("session")?.value);
-
   return (
     <html lang="ko">
       <head>
@@ -27,67 +20,7 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-screen bg-gradient-to-b from-sky-50 via-white to-white text-slate-900">
-        <header className="sticky top-0 z-30 border-b border-sky-100 bg-white/80 backdrop-blur">
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
-            <Link href="/" className="text-xl font-bold tracking-tight text-slate-800">
-              <span className="text-brand">📖</span> Novel Blog
-            </Link>
-            <nav className="flex items-center gap-2 text-sm">
-              {session ? (
-                <>
-                  <Link
-                    href="/write"
-                    className="rounded-full bg-brand px-3 py-1.5 font-medium text-white hover:bg-brand-dark"
-                  >
-                    글쓰기
-                  </Link>
-                  <Link
-                    href={`/u/${session.username}`}
-                    className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
-                  >
-                    내 블로그
-                  </Link>
-                  <Link
-                    href="/dashboard"
-                    className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
-                  >
-                    내 글
-                  </Link>
-                  <Link
-                    href="/account"
-                    className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
-                    title="계정 설정"
-                  >
-                    설정
-                  </Link>
-                  <span className="hidden px-2 text-slate-500 sm:inline">
-                    {session.displayName}
-                  </span>
-                  <LogoutButton />
-                </>
-              ) : (
-                <>
-                  <Link
-                    href="/login"
-                    className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
-                  >
-                    로그인
-                  </Link>
-                  <Link
-                    href="/signup"
-                    className="rounded-full bg-brand px-3 py-1.5 font-medium text-white hover:bg-brand-dark"
-                  >
-                    가입
-                  </Link>
-                </>
-              )}
-            </nav>
-          </div>
-        </header>
-        <main className="mx-auto max-w-5xl px-4 py-8">{children}</main>
-        <footer className="mt-16 border-t border-sky-100 py-8 text-center text-xs text-slate-500">
-          © {new Date().getFullYear()} Novel Blog
-        </footer>
+        {children}
       </body>
     </html>
   );

@@ -1,140 +1,156 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigate } from "react-router-dom";
+import { supabase, type Category, type Folder } from "@/lib/supabase";
+import { useAuth } from "@/lib/AuthContext";
+import { slugify, excerptFromHtml } from "@/lib/slug";
 import Editor from "./Editor";
 
-type Props = {
-  initial?: {
-    id?: string;
-    title: string;
-    content: string;
-    category: string | null;
-    folderId?: string | null;
-    published?: boolean;
-  };
+type Initial = {
+  id?: string;
+  title: string;
+  content: string;
+  category: string | null;
+  folderId?: string | null;
+  published?: boolean;
 };
 
-export default function PostForm({ initial }: Props) {
-  const router = useRouter();
+export default function PostForm({ initial }: { initial?: Initial }) {
+  const nav = useNavigate();
+  const { user, profile } = useAuth();
   const [title, setTitle] = useState(initial?.title ?? "");
   const [content, setContent] = useState(initial?.content ?? "");
   const [category, setCategory] = useState(initial?.category ?? "");
   const [folderId, setFolderId] = useState<string>(initial?.folderId ?? "");
   const [published, setPublished] = useState<boolean>(initial?.published ?? true);
-  const [cats, setCats] = useState<{ id: string; name: string }[]>([]);
-  const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
+  const [cats, setCats] = useState<Category[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
   const [newCat, setNewCat] = useState("");
   const [newFolder, setNewFolder] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch("/api/categories")
-      .then((r) => r.json())
-      .then((d) => Array.isArray(d) && setCats(d));
-    fetch("/api/folders")
-      .then((r) => r.json())
-      .then((d) => Array.isArray(d) && setFolders(d));
-  }, []);
+    if (!user) return;
+    const sb = supabase();
+    sb.from("categories")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("sort_order")
+      .then(({ data }) => setCats((data ?? []) as Category[]));
+    sb.from("folders")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("sort_order")
+      .then(({ data }) => setFolders((data ?? []) as Folder[]));
+  }, [user]);
 
   const addCategory = async () => {
     const name = newCat.trim();
-    if (!name) return;
-    try {
-      const res = await fetch("/api/categories", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "추가 실패");
-      setCats((cs) => [...cs, { id: data.id, name: data.name }]);
-      setCategory(data.name);
-      setNewCat("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "오류");
+    if (!name || !user) return;
+    const { data, error } = await supabase()
+      .from("categories")
+      .insert({ user_id: user.id, name, sort_order: cats.length })
+      .select()
+      .single();
+    if (error) {
+      setError(error.message);
+      return;
     }
-  };
-
-  const deleteCategory = async (id: string, name: string) => {
-    if (!confirm(`'${name}' 카테고리를 삭제할까요? (기존 글의 카테고리 태그는 남습니다)`)) return;
-    try {
-      const res = await fetch(`/api/categories/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("삭제 실패");
-      setCats((cs) => cs.filter((c) => c.id !== id));
-      if (category === name) setCategory("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "오류");
-    }
+    setCats((cs) => [...cs, data as Category]);
+    setCategory((data as Category).name);
+    setNewCat("");
   };
 
   const addFolder = async () => {
     const name = newFolder.trim();
-    if (!name) return;
-    try {
-      const res = await fetch("/api/folders", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "추가 실패");
-      setFolders((fs) => [...fs, { id: data.id, name: data.name }]);
-      setFolderId(data.id);
-      setNewFolder("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "오류");
+    if (!name || !user) return;
+    const { data, error } = await supabase()
+      .from("folders")
+      .insert({ user_id: user.id, name, sort_order: folders.length })
+      .select()
+      .single();
+    if (error) {
+      setError(error.message);
+      return;
     }
-  };
-
-  const deleteFolder = async (id: string, name: string) => {
-    if (!confirm(`'${name}' 폴더를 삭제할까요? (이 폴더의 글들은 폴더 없음으로 이동합니다)`)) return;
-    try {
-      const res = await fetch(`/api/folders/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("삭제 실패");
-      setFolders((fs) => fs.filter((f) => f.id !== id));
-      if (folderId === id) setFolderId("");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "오류");
-    }
+    setFolders((fs) => [...fs, data as Folder]);
+    setFolderId((data as Folder).id);
+    setNewFolder("");
   };
 
   const submit = async () => {
+    if (!user || !profile) return;
     if (!title.trim()) {
       setError("제목을 입력해 주세요");
       return;
     }
     setError(null);
     setSaving(true);
-    try {
-      const url = initial?.id ? `/api/posts/${initial.id}` : "/api/posts";
-      const method = initial?.id ? "PATCH" : "POST";
-      const res = await fetch(url, {
-        method,
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          title,
+    const sb = supabase();
+
+    if (initial?.id) {
+      // 수정 — slug는 그대로 둠
+      const { data, error } = await sb
+        .from("posts")
+        .update({
+          title: title.trim(),
           content,
+          excerpt: excerptFromHtml(content),
           category: category || null,
-          folderId: folderId || null,
+          folder_id: folderId || null,
           published,
-        }),
-      });
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}));
-        throw new Error(j.error || "저장 실패");
-      }
-      const data = await res.json();
-      // Use the post id (ASCII nanoid) for the post-save redirect to
-      // avoid any URL/Hangul normalization mismatch. The post page
-      // route already resolves either slug or id to the same post.
-      router.refresh();
-      router.push(`/u/${data.authorUsername}/${data.id}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "오류");
-    } finally {
+        })
+        .eq("id", initial.id)
+        .select()
+        .single();
       setSaving(false);
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      nav(`/u/${profile.username}/${(data as { id: string }).id}`);
+    } else {
+      // 새 글 — slug 생성, 충돌 시 -랜덤 접미사 추가
+      let baseSlug = slugify(title.trim());
+      let slug = baseSlug;
+      let attempt = 0;
+      // RLS-safe: 본인 author_id로 직접 검사
+      // 충돌 시 nano 8자 추가
+      // (충돌은 보통 잘 안 일어나니 한 번이면 충분)
+      while (attempt < 3) {
+        const { data: existing } = await sb
+          .from("posts")
+          .select("id")
+          .eq("author_id", user.id)
+          .eq("slug", slug)
+          .maybeSingle();
+        if (!existing) break;
+        slug = `${baseSlug}-${Math.random().toString(36).slice(2, 7)}`;
+        attempt++;
+      }
+
+      const { data, error } = await sb
+        .from("posts")
+        .insert({
+          author_id: user.id,
+          slug,
+          title: title.trim(),
+          content,
+          excerpt: excerptFromHtml(content),
+          category: category || null,
+          folder_id: folderId || null,
+          published,
+        })
+        .select()
+        .single();
+      setSaving(false);
+      if (error) {
+        setError(error.message);
+        return;
+      }
+      nav(`/u/${profile.username}/${(data as { id: string }).id}`);
     }
   };
 
@@ -142,15 +158,16 @@ export default function PostForm({ initial }: Props) {
     if (!initial?.id) return;
     if (!confirm("정말 삭제하시겠습니까?")) return;
     setSaving(true);
-    try {
-      const res = await fetch(`/api/posts/${initial.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("삭제 실패");
-      router.push("/dashboard");
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "오류");
-      setSaving(false);
+    const { error } = await supabase()
+      .from("posts")
+      .delete()
+      .eq("id", initial.id);
+    setSaving(false);
+    if (error) {
+      setError(error.message);
+      return;
     }
+    nav("/dashboard");
   };
 
   return (
@@ -162,6 +179,7 @@ export default function PostForm({ initial }: Props) {
         placeholder="제목"
         className="w-full border-b-2 border-sky-200 bg-transparent py-3 text-2xl font-bold text-slate-900 outline-none focus:border-brand"
       />
+
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-sm text-slate-500">카테고리</label>
@@ -177,28 +195,18 @@ export default function PostForm({ initial }: Props) {
             선택 안 함
           </button>
           {cats.map((c) => (
-            <span
+            <button
               key={c.id}
-              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs ${
+              type="button"
+              onClick={() => setCategory(c.name)}
+              className={`rounded-full px-3 py-1 text-xs ${
                 category === c.name
                   ? "bg-brand text-white"
                   : "border border-sky-200 text-slate-700 hover:border-brand"
               }`}
             >
-              <button type="button" onClick={() => setCategory(c.name)}>
-                {c.name}
-              </button>
-              <button
-                type="button"
-                onClick={() => deleteCategory(c.id, c.name)}
-                className={`ml-1 text-[10px] ${
-                  category === c.name ? "text-white/80 hover:text-white" : "text-slate-400 hover:text-red-500"
-                }`}
-                title="삭제"
-              >
-                ✕
-              </button>
-            </span>
+              {c.name}
+            </button>
           ))}
         </div>
         <div className="flex items-center gap-2">
@@ -241,28 +249,18 @@ export default function PostForm({ initial }: Props) {
             폴더 없음
           </button>
           {folders.map((f) => (
-            <span
+            <button
               key={f.id}
-              className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs ${
+              type="button"
+              onClick={() => setFolderId(f.id)}
+              className={`rounded-full px-3 py-1 text-xs ${
                 folderId === f.id
                   ? "bg-brand text-white"
                   : "border border-sky-200 text-slate-700 hover:border-brand"
               }`}
             >
-              <button type="button" onClick={() => setFolderId(f.id)}>
-                📁 {f.name}
-              </button>
-              <button
-                type="button"
-                onClick={() => deleteFolder(f.id, f.name)}
-                className={`ml-1 text-[10px] ${
-                  folderId === f.id ? "text-white/80 hover:text-white" : "text-slate-400 hover:text-red-500"
-                }`}
-                title="삭제"
-              >
-                ✕
-              </button>
-            </span>
+              📁 {f.name}
+            </button>
           ))}
         </div>
         <div className="flex items-center gap-2">
