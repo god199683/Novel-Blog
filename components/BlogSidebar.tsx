@@ -109,8 +109,6 @@ export default function BlogSidebar({
     return map;
   }, [tree, cats]);
 
-  const hasUnclassified = (rootByCategory.get(null) ?? []).length > 0;
-
   // ---------- 카테고리 CRUD ----------
   const addCategory = async () => {
     const name = newCat.trim();
@@ -444,14 +442,6 @@ export default function BlogSidebar({
           />
         ))}
 
-        {(hasUnclassified || isOwner) && (
-          <CategorySection
-            categoryName={null}
-            roots={rootByCategory.get(null) ?? []}
-            allFolders={fls}
-            {...sectionProps}
-          />
-        )}
       </div>
 
       {isOwner && (
