@@ -149,7 +149,47 @@ export default function UserBlogView() {
               )}
             </p>
           )}
-          {posts.length === 0 ? (
+          {selectedCategory && !selectedFolder ? (
+            (() => {
+              const topLevel = folders.filter(
+                (f) => !f.parent_id && f.category === selectedCategory
+              );
+              if (topLevel.length === 0) {
+                return (
+                  <p className="py-10 text-center text-slate-500">
+                    이 카테고리에 폴더가 없어요.
+                  </p>
+                );
+              }
+              return (
+                <ul className="grid gap-3 sm:grid-cols-2">
+                  {topLevel.map((f) => {
+                    const childCount = folders.filter(
+                      (x) => x.parent_id === f.id
+                    ).length;
+                    return (
+                      <li key={f.id}>
+                        <Link
+                          to={`/u/${profile.username}?folder=${f.id}`}
+                          className="block rounded-xl border border-sky-100 bg-white p-5 shadow-sm transition hover:border-brand hover:shadow-md"
+                        >
+                          <div className="text-2xl">📁</div>
+                          <div className="mt-2 font-semibold text-slate-900">
+                            {f.name}
+                          </div>
+                          {childCount > 0 && (
+                            <div className="mt-1 text-xs text-slate-500">
+                              하위 폴더 {childCount}개
+                            </div>
+                          )}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              );
+            })()
+          ) : posts.length === 0 ? (
             <p className="py-10 text-center text-slate-500">아직 글이 없어요.</p>
           ) : (
             <ul className="divide-y divide-sky-100">
