@@ -288,9 +288,7 @@ export default function PostForm({ initial }: { initial?: Initial }) {
         </div>
       </div>
 
-      <Editor initialContent={content} onChange={setContent} />
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+      <div className="sticky top-14 z-20 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-100 bg-white/80 px-3 py-2 shadow-sm backdrop-blur">
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-500">공개 설정</span>
           <button
@@ -322,7 +320,7 @@ export default function PostForm({ initial }: { initial?: Initial }) {
               type="button"
               onClick={remove}
               disabled={saving}
-              className="rounded px-4 py-2 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
+              className="rounded px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50"
             >
               삭제
             </button>
@@ -331,7 +329,7 @@ export default function PostForm({ initial }: { initial?: Initial }) {
             type="button"
             onClick={submit}
             disabled={saving}
-            className="rounded-full bg-brand px-6 py-2 font-medium text-white hover:bg-brand-dark disabled:opacity-50"
+            className="rounded-full bg-brand px-5 py-1.5 text-sm font-medium text-white hover:bg-brand-dark disabled:opacity-50"
           >
             {saving
               ? "저장 중..."
@@ -343,6 +341,9 @@ export default function PostForm({ initial }: { initial?: Initial }) {
           </button>
         </div>
       </div>
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <Editor initialContent={content} onChange={setContent} />
     </div>
   );
 }
