@@ -43,9 +43,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 >
                   설정
                 </Link>
-                <span className="hidden px-2 text-slate-500 sm:inline">
-                  {profile?.display_name ?? user.email}
-                </span>
+                {profile && (
+                  <span className="hidden px-2 text-slate-500 sm:inline">
+                    {profile.display_name}
+                  </span>
+                )}
                 <button
                   type="button"
                   onClick={async () => {

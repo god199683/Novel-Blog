@@ -66,10 +66,6 @@ export default function AccountView() {
       <section className="mb-6 rounded-lg border border-sky-100 bg-white/70 p-5">
         <h2 className="mb-2 text-sm font-semibold text-slate-700">계정 정보</h2>
         <dl className="space-y-1 text-sm text-slate-600">
-          <div className="flex gap-2">
-            <dt className="w-24 text-slate-400">이메일</dt>
-            <dd>{user.email}</dd>
-          </div>
           {profile && (
             <>
               <div className="flex gap-2">

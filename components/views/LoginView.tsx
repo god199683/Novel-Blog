@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
+import { supabase, usernameToEmail } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 
 export default function LoginView() {
   const nav = useNavigate();
   const { user } = useAuth();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -22,13 +22,14 @@ export default function LoginView() {
     e.preventDefault();
     setError(null);
     setBusy(true);
+    const u = username.toLowerCase().trim();
     const { error } = await supabase().auth.signInWithPassword({
-      email: email.trim(),
+      email: usernameToEmail(u),
       password,
     });
     setBusy(false);
     if (error) {
-      setError(error.message);
+      setError("아이디 또는 비밀번호가 맞지 않아요");
       return;
     }
     nav("/dashboard");
@@ -42,14 +43,14 @@ export default function LoginView() {
       <form onSubmit={submit} className="space-y-3">
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-700">
-            이메일
+            아이디
           </label>
           <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
             required
-            autoComplete="email"
+            autoComplete="username"
             className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
           />
         </div>

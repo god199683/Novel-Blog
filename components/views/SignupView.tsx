@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase";
+import { supabase, usernameToEmail } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { validateUsername } from "@/lib/slug";
 
 export default function SignupView() {
   const nav = useNavigate();
   const { user, refreshProfile } = useAuth();
-  const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
@@ -42,81 +41,81 @@ export default function SignupView() {
     setBusy(true);
     const sb = supabase();
 
-    // 1. 가입
-    const { data, error: signErr } = await sb.auth.signUp({
-      email: email.trim(),
-      password,
-    });
-    if (signErr || !data.user) {
+    // 가입 전 username 중복 사전 체크 — auth.users 고아 행을 줄이기 위해
+    const { data: existing } = await sb
+      .from("profiles")
+      .select("id")
+      .eq("username", u)
+      .maybeSingle();
+    if (existing) {
       setBusy(false);
-      setError(signErr?.message ?? "가입 실패");
+      setError("이미 사용 중인 아이디예요");
       return;
     }
 
-    // 2. profile 생성 (auth.uid()로 RLS insert 통과)
-    //    이메일 확인 OFF인 경우 session이 바로 생기지만, ON인 경우 session이 없을 수 있음.
-    //    session이 없으면 profile insert가 RLS에 막히므로, 이메일 확인을 끄거나 사용자 안내 필요.
-    if (data.session) {
-      const { error: profErr } = await sb.from("profiles").insert({
-        id: data.user.id,
-        username: u,
-        display_name: displayName.trim(),
-        blog_title: `${displayName.trim()}의 블로그`,
-      });
-      if (profErr) {
-        setBusy(false);
-        setError(
-          profErr.code === "23505"
-            ? "이미 사용 중인 아이디예요"
-            : profErr.message
-        );
-        return;
-      }
-
-      // 3. 기본 카테고리 4개
-      const defaults = ["장편", "단편", "에세이", "기타"];
-      await sb.from("categories").insert(
-        defaults.map((name, i) => ({
-          user_id: data.user!.id,
-          name,
-          sort_order: i,
-        }))
-      );
-
-      await refreshProfile();
+    // 1. Supabase Auth 가입 (합성 이메일)
+    const email = usernameToEmail(u);
+    const { data, error: signErr } = await sb.auth.signUp({ email, password });
+    if (signErr || !data.user) {
       setBusy(false);
-      nav("/dashboard");
-    } else {
-      // 이메일 확인이 켜진 경우
+      // 같은 username으로 이전에 시도해서 auth.users만 남은 케이스
+      if (signErr?.message?.toLowerCase().includes("already registered")) {
+        setError(
+          "이 아이디는 예전에 가입 시도된 적이 있어요. 다른 아이디로 시도해주세요."
+        );
+      } else {
+        setError(signErr?.message ?? "가입 실패");
+      }
+      return;
+    }
+
+    // 2. profile 생성 — session이 없으면(이메일 확인 ON) RLS가 막음.
+    if (!data.session) {
       setBusy(false);
       setError(
-        "가입 메일을 보냈어요. 메일함에서 확인 링크를 누른 뒤 다시 로그인해 주세요."
+        "Supabase 설정에서 'Confirm email'을 끄거나, 메일함의 확인 링크를 눌러 주세요."
       );
+      return;
     }
+
+    const { error: profErr } = await sb.from("profiles").insert({
+      id: data.user.id,
+      username: u,
+      display_name: displayName.trim(),
+      blog_title: `${displayName.trim()}의 블로그`,
+    });
+    if (profErr) {
+      setBusy(false);
+      setError(
+        profErr.code === "23505"
+          ? "이미 사용 중인 아이디예요"
+          : profErr.message
+      );
+      return;
+    }
+
+    // 3. 기본 카테고리
+    const defaults = ["장편", "단편", "에세이", "기타"];
+    await sb.from("categories").insert(
+      defaults.map((name, i) => ({
+        user_id: data.user!.id,
+        name,
+        sort_order: i,
+      }))
+    );
+
+    await refreshProfile();
+    setBusy(false);
+    nav("/dashboard");
   };
 
   return (
     <div className="mx-auto max-w-sm">
-      <h1 className="mb-6 text-center text-2xl font-bold text-slate-900">
-        가입
-      </h1>
+      <h1 className="mb-6 text-center text-2xl font-bold text-slate-900">가입</h1>
       <form onSubmit={submit} className="space-y-3">
         <div>
           <label className="mb-1 block text-xs font-medium text-slate-700">
-            이메일
-          </label>
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            autoComplete="email"
-            className="w-full rounded border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">
-            아이디 (영문/숫자/_) — 블로그 URL에 쓰입니다
+            아이디 (영문 소문자/숫자/언더스코어, 3-20자) — 블로그 URL에 쓰입니다
           </label>
           <input
             type="text"

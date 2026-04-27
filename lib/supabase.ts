@@ -27,6 +27,14 @@ export function supabase(): SupabaseClient {
   return _client;
 }
 
+// Supabase Auth requires an email per account, but the user-facing
+// flow is username-only. Map a username to a stable synthetic email
+// in a non-routable namespace; users never see it.
+const SYNTHETIC_EMAIL_DOMAIN = "novel-blog.local";
+export function usernameToEmail(username: string): string {
+  return `${username.toLowerCase().trim()}@${SYNTHETIC_EMAIL_DOMAIN}`;
+}
+
 export type Profile = {
   id: string;
   username: string;
