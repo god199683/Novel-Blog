@@ -44,9 +44,55 @@ export default function BlogSidebar({
   const [newFolderName, setNewFolderName] = useState("");
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropHint, setDropHint] = useState<DropHint | null>(null);
+  // 접힘 상태 — localStorage에 저장해서 새로고침해도 유지
+  const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
+    new Set()
+  );
 
   useEffect(() => setCats(initialCategories), [initialCategories]);
   useEffect(() => setFls(initialFolders), [initialFolders]);
+
+  // 처음 mount 시 localStorage에서 접힘 상태 복원
+  useEffect(() => {
+    try {
+      const c = window.localStorage.getItem("nb_sidebar_collapsed_cats");
+      if (c) setCollapsedCats(new Set(JSON.parse(c) as string[]));
+      const f = window.localStorage.getItem("nb_sidebar_collapsed_folders");
+      if (f) setCollapsedFolders(new Set(JSON.parse(f) as string[]));
+    } catch {}
+  }, []);
+
+  const toggleCategory = (name: string | null) => {
+    const key = name ?? "__none__";
+    setCollapsedCats((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      try {
+        window.localStorage.setItem(
+          "nb_sidebar_collapsed_cats",
+          JSON.stringify(Array.from(next))
+        );
+      } catch {}
+      return next;
+    });
+  };
+
+  const toggleFolder = (id: string) => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      try {
+        window.localStorage.setItem(
+          "nb_sidebar_collapsed_folders",
+          JSON.stringify(Array.from(next))
+        );
+      } catch {}
+      return next;
+    });
+  };
 
   const tree = useMemo(() => buildTree(fls), [fls]);
 
@@ -365,6 +411,10 @@ export default function BlogSidebar({
     onFolderDrop,
     onCategoryDragOver,
     onCategoryDrop,
+    collapsedCats,
+    collapsedFolders,
+    toggleCategory,
+    toggleFolder,
   };
 
   return (
@@ -463,6 +513,10 @@ type SectionProps = {
   onFolderDrop: (e: React.DragEvent, folderId: string) => Promise<void>;
   onCategoryDragOver: (e: React.DragEvent, category: string | null) => void;
   onCategoryDrop: (e: React.DragEvent, category: string | null) => Promise<void>;
+  collapsedCats: Set<string>;
+  collapsedFolders: Set<string>;
+  toggleCategory: (name: string | null) => void;
+  toggleFolder: (id: string) => void;
 };
 
 function CategorySection(props: SectionProps) {
@@ -477,12 +531,17 @@ function CategorySection(props: SectionProps) {
     dropHint,
     onCategoryDragOver,
     onCategoryDrop,
+    collapsedCats,
+    toggleCategory,
   } = props;
 
   const isAddingHere =
     addTarget?.kind === "category" && addTarget.category === categoryName;
   const isCategoryDropTarget =
     dropHint?.kind === "category" && dropHint.category === categoryName;
+  const collapseKey = categoryName ?? "__none__";
+  const collapsed = collapsedCats.has(collapseKey);
+  const hasChildren = roots.length > 0;
 
   return (
     <div>
@@ -493,10 +552,26 @@ function CategorySection(props: SectionProps) {
           isCategoryDropTarget ? "bg-brand-light/40 ring-1 ring-brand" : ""
         }`}
       >
+        <button
+          type="button"
+          onClick={() => toggleCategory(categoryName)}
+          title={collapsed ? "펼치기" : "접기"}
+          aria-label={collapsed ? "펼치기" : "접기"}
+          className={`flex h-6 w-5 items-center justify-center text-slate-400 hover:text-slate-700 ${
+            !hasChildren ? "invisible" : ""
+          }`}
+        >
+          <span
+            className="inline-block transition-transform"
+            style={{ transform: collapsed ? "rotate(0deg)" : "rotate(90deg)" }}
+          >
+            ▶
+          </span>
+        </button>
         {categoryName ? (
           <Link
             to={`/u/${username}?category=${encodeURIComponent(categoryName)}`}
-            className={`flex-1 truncate rounded px-2 py-1 text-xs font-semibold uppercase tracking-wide ${
+            className={`flex-1 truncate rounded px-1 py-1 text-xs font-semibold uppercase tracking-wide ${
               selectedCategory === categoryName
                 ? "bg-brand-light text-brand-dark"
                 : "text-slate-500 hover:bg-sky-50"
@@ -505,7 +580,7 @@ function CategorySection(props: SectionProps) {
             {categoryName}
           </Link>
         ) : (
-          <span className="flex-1 truncate px-2 py-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <span className="flex-1 truncate px-1 py-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
             분류 없음
           </span>
         )}
@@ -535,13 +610,16 @@ function CategorySection(props: SectionProps) {
         )}
       </div>
 
-      {isAddingHere && <AddFolderInput {...props} />}
-
-      <ul className="mt-1 space-y-0.5">
-        {roots.map((node) => (
-          <FolderTreeItem key={node.id} node={node} depth={0} {...props} />
-        ))}
-      </ul>
+      {!collapsed && (
+        <>
+          {isAddingHere && <AddFolderInput {...props} />}
+          <ul className="mt-1 space-y-0.5">
+            {roots.map((node) => (
+              <FolderTreeItem key={node.id} node={node} depth={0} {...props} />
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }
@@ -564,19 +642,20 @@ function FolderTreeItem({
     onDragEnd,
     onFolderDragOver,
     onFolderDrop,
+    collapsedFolders,
+    toggleFolder,
   } = rest;
 
   const isAddingHere =
     addTarget?.kind === "folder" && addTarget.parentId === node.id;
   const isDragging = draggingId === node.id;
   const folderHint =
-    dropHint?.kind === "folder" && dropHint.id === node.id
-      ? dropHint
-      : null;
+    dropHint?.kind === "folder" && dropHint.id === node.id ? dropHint : null;
+  const hasChildren = node.children.length > 0;
+  const collapsed = collapsedFolders.has(node.id);
 
   return (
     <li>
-      {/* 위쪽 드롭 라인 */}
       {folderHint?.position === "before" && (
         <div
           className="mx-2 my-0.5 h-0.5 rounded bg-brand"
@@ -598,10 +677,26 @@ function FolderTreeItem({
             : ""
         }`}
       >
+        <button
+          type="button"
+          onClick={() => toggleFolder(node.id)}
+          title={collapsed ? "펼치기" : "접기"}
+          aria-label={collapsed ? "펼치기" : "접기"}
+          style={{ marginLeft: depth * 14 }}
+          className={`flex h-6 w-5 items-center justify-center text-slate-400 hover:text-slate-700 ${
+            !hasChildren ? "invisible" : ""
+          }`}
+        >
+          <span
+            className="inline-block text-[9px] transition-transform"
+            style={{ transform: collapsed ? "rotate(0deg)" : "rotate(90deg)" }}
+          >
+            ▶
+          </span>
+        </button>
         <Link
           to={`/u/${username}?folder=${node.id}`}
-          style={{ paddingLeft: 8 + depth * 14 }}
-          className={`flex-1 truncate rounded py-1 ${
+          className={`flex-1 truncate rounded px-1 py-1 ${
             selectedFolder === node.id
               ? "bg-brand-light font-medium text-brand-dark"
               : "text-slate-600 hover:bg-sky-50"
@@ -637,7 +732,6 @@ function FolderTreeItem({
         )}
       </div>
 
-      {/* 아래쪽 드롭 라인 */}
       {folderHint?.position === "after" && (
         <div
           className="mx-2 my-0.5 h-0.5 rounded bg-brand"
@@ -651,7 +745,7 @@ function FolderTreeItem({
         </div>
       )}
 
-      {node.children.length > 0 && (
+      {hasChildren && !collapsed && (
         <ul className="space-y-0.5">
           {node.children.map((child) => (
             <FolderTreeItem
