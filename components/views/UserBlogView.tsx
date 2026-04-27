@@ -14,6 +14,7 @@ import {
   type Category,
 } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
+import { descendantIds } from "@/lib/folders";
 import BlogSidebar from "@/components/BlogSidebar";
 import PostActions from "@/components/PostActions";
 
@@ -56,17 +57,9 @@ export default function UserBlogView() {
       }
       setProfile(prof as Profile);
 
-      const [postsRes, foldersRes, catsRes] = await Promise.all([
-        (() => {
-          let q = sb
-            .from("posts")
-            .select("*")
-            .eq("author_id", (prof as Profile).id)
-            .order("created_at", { ascending: false });
-          if (selectedCategory) q = q.eq("category", selectedCategory);
-          if (selectedFolder) q = q.eq("folder_id", selectedFolder);
-          return q;
-        })(),
+      // 폴더/카테고리 먼저 — 폴더 클릭 시 하위 폴더 ID까지 포함해서
+      // 글 쿼리를 만들기 때문에.
+      const [foldersRes, catsRes] = await Promise.all([
         sb
           .from("folders")
           .select("*")
@@ -81,9 +74,23 @@ export default function UserBlogView() {
           .order("created_at", { ascending: false }),
       ]);
       if (!active) return;
-      setPosts((postsRes.data ?? []) as Post[]);
-      setFolders((foldersRes.data ?? []) as Folder[]);
+      const folderRows = (foldersRes.data ?? []) as Folder[];
+      setFolders(folderRows);
       setCategories((catsRes.data ?? []) as Category[]);
+
+      let q = sb
+        .from("posts")
+        .select("*")
+        .eq("author_id", (prof as Profile).id)
+        .order("created_at", { ascending: false });
+      if (selectedCategory) q = q.eq("category", selectedCategory);
+      if (selectedFolder) {
+        const ids = descendantIds(folderRows, selectedFolder);
+        q = q.in("folder_id", ids);
+      }
+      const postsRes = await q;
+      if (!active) return;
+      setPosts((postsRes.data ?? []) as Post[]);
       setLoading(false);
     })();
     return () => {
