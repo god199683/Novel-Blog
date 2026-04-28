@@ -27,6 +27,7 @@ export default function HomeView() {
           "id,title,slug,excerpt,category,created_at,author:profiles!posts_author_id_fkey(username,display_name)"
         )
         .eq("published", true)
+        .eq("kind", "post")
         .order("created_at", { ascending: false })
         .limit(30);
       if (!active) return;

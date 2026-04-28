@@ -93,13 +93,14 @@ export default function UserPostView() {
       }
       setPost(row);
 
-      // 3. 같은 폴더 형제글 (이전·다음)
+      // 3. 같은 폴더 + 같은 종류(글/자료)만 형제로
       if (row.folder_id) {
         const { data: sibs } = await sb
           .from("posts")
-          .select("id,title,published,created_at")
+          .select("id,title,published,created_at,kind")
           .eq("author_id", (prof as Profile).id)
           .eq("folder_id", row.folder_id)
+          .eq("kind", row.kind ?? "post")
           .order("created_at", { ascending: true });
         if (active && sibs) {
           const filtered =
@@ -155,10 +156,23 @@ export default function UserPostView() {
     );
   }
 
+  const isMaterial = post.kind === "material";
+  const siblingBase = isMaterial
+    ? `/u/${profile.username}/materials`
+    : `/u/${profile.username}`;
+  const profileLink = isMaterial
+    ? `/u/${profile.username}/materials`
+    : `/u/${profile.username}`;
+
   return (
     <article className="mx-auto max-w-3xl">
       <header className="mb-8 border-b border-sky-100 pb-6">
         <div className="mb-3 flex items-center gap-2 text-xs text-slate-500">
+          {isMaterial && (
+            <span className="rounded-full bg-purple-100 px-2 py-0.5 font-medium text-purple-700">
+              자료
+            </span>
+          )}
           {!post.published && (
             <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700">
               비공개
@@ -176,7 +190,7 @@ export default function UserPostView() {
         </h1>
         <div className="mt-4 flex items-center justify-between">
           <Link
-            to={`/u/${profile.username}`}
+            to={profileLink}
             className="text-sm text-slate-700 hover:text-brand"
           >
             {profile.display_name}{" "}
@@ -197,9 +211,9 @@ export default function UserPostView() {
         html={post.content}
         title={post.title}
         authorName={profile.display_name}
-        prevHref={prev ? `/u/${profile.username}/${prev.id}` : null}
+        prevHref={prev ? `${siblingBase}/${prev.id}` : null}
         prevTitle={prev?.title ?? null}
-        nextHref={next ? `/u/${profile.username}/${next.id}` : null}
+        nextHref={next ? `${siblingBase}/${next.id}` : null}
         nextTitle={next?.title ?? null}
       />
     </article>

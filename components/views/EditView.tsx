@@ -41,8 +41,11 @@ export default function EditView() {
 
   return (
     <div>
-      <h1 className="mb-6 text-2xl font-bold text-slate-900">글 수정</h1>
+      <h1 className="mb-6 text-2xl font-bold text-slate-900">
+        {post.kind === "material" ? "자료 수정" : "글 수정"}
+      </h1>
       <PostForm
+        kind={post.kind ?? "post"}
         initial={{
           id: post.id,
           title: post.title,
@@ -50,6 +53,7 @@ export default function EditView() {
           category: post.category,
           folderId: post.folder_id,
           published: post.published,
+          kind: post.kind ?? "post",
         }}
       />
     </div>

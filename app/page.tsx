@@ -40,7 +40,15 @@ export default function Page() {
             <Route path="/write" element={<WriteView />} />
             <Route path="/edit/:id" element={<EditView />} />
             <Route path="/account" element={<AccountView />} />
-            <Route path="/u/:username" element={<UserBlogView />} />
+            <Route path="/u/:username" element={<UserBlogView mode="post" />} />
+            <Route
+              path="/u/:username/materials"
+              element={<UserBlogView mode="material" />}
+            />
+            <Route
+              path="/u/:username/materials/:idOrSlug"
+              element={<UserPostView />}
+            />
             <Route path="/u/:username/:idOrSlug" element={<UserPostView />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

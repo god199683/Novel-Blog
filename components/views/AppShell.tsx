@@ -24,12 +24,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   글쓰기
                 </Link>
                 {profile && (
-                  <Link
-                    to={`/u/${profile.username}`}
-                    className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
-                  >
-                    내 블로그
-                  </Link>
+                  <>
+                    <Link
+                      to={`/u/${profile.username}`}
+                      className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
+                    >
+                      내 블로그
+                    </Link>
+                    <Link
+                      to={`/u/${profile.username}/materials`}
+                      className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
+                    >
+                      자료실
+                    </Link>
+                  </>
                 )}
                 <Link
                   to="/dashboard"

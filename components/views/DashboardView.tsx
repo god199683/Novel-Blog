@@ -63,10 +63,19 @@ export default function DashboardView() {
           {rows.map((p) => (
             <li key={p.id} className="flex items-center justify-between py-4">
               <Link
-                to={`/u/${profile?.username ?? ""}/${p.id}`}
+                to={
+                  p.kind === "material"
+                    ? `/u/${profile?.username ?? ""}/materials/${p.id}`
+                    : `/u/${profile?.username ?? ""}/${p.id}`
+                }
                 className="flex-1"
               >
                 <div className="flex items-center gap-2 text-xs text-slate-500">
+                  {p.kind === "material" && (
+                    <span className="rounded-full bg-purple-100 px-2 py-0.5 font-medium text-purple-700">
+                      자료
+                    </span>
+                  )}
                   {!p.published && (
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700">
                       비공개

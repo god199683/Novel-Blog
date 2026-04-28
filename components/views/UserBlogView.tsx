@@ -18,7 +18,9 @@ import { descendantIds } from "@/lib/folders";
 import BlogSidebar from "@/components/BlogSidebar";
 import PostActions from "@/components/PostActions";
 
-export default function UserBlogView() {
+type Props = { mode?: "post" | "material" };
+
+export default function UserBlogView({ mode = "post" }: Props) {
   const { username } = useParams<{ username: string }>();
   const [params] = useSearchParams();
   const selectedCategory = params.get("category");
@@ -82,6 +84,7 @@ export default function UserBlogView() {
         .from("posts")
         .select("*")
         .eq("author_id", (prof as Profile).id)
+        .eq("kind", mode)
         .order("created_at", { ascending: false });
       if (selectedCategory) q = q.eq("category", selectedCategory);
       if (selectedFolder) {
@@ -96,7 +99,7 @@ export default function UserBlogView() {
     return () => {
       active = false;
     };
-  }, [username, selectedCategory, selectedFolder]);
+  }, [username, selectedCategory, selectedFolder, mode]);
 
   if (loading) return <p className="py-10 text-center text-slate-500">불러오는 중...</p>;
   if (notFound) return <p className="py-10 text-center text-slate-500">사용자를 찾을 수 없어요</p>;
@@ -106,9 +109,12 @@ export default function UserBlogView() {
     ? folders.find((f) => f.id === selectedFolder)?.name
     : null;
 
+  const blogPath = `/u/${profile.username}`;
+  const materialsPath = `/u/${profile.username}/materials`;
+
   return (
     <div>
-      <section className="mb-8 rounded-2xl bg-gradient-to-br from-sky-50 to-white p-8 ring-1 ring-sky-100">
+      <section className="mb-6 rounded-2xl bg-gradient-to-br from-sky-50 to-white p-8 ring-1 ring-sky-100">
         <h1 className="text-3xl font-bold text-slate-900">
           {profile.blog_title ?? `${profile.display_name}의 블로그`}
         </h1>
@@ -117,6 +123,39 @@ export default function UserBlogView() {
         </p>
         {profile.bio && <p className="mt-3 text-slate-700">{profile.bio}</p>}
       </section>
+
+      <nav className="mb-6 flex items-center justify-between border-b border-sky-100">
+        <div className="flex gap-1">
+          <Link
+            to={blogPath}
+            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
+              mode === "post"
+                ? "border-brand text-brand"
+                : "border-transparent text-slate-500 hover:text-brand"
+            }`}
+          >
+            글
+          </Link>
+          <Link
+            to={materialsPath}
+            className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
+              mode === "material"
+                ? "border-brand text-brand"
+                : "border-transparent text-slate-500 hover:text-brand"
+            }`}
+          >
+            자료실
+          </Link>
+        </div>
+        {isOwner && (
+          <Link
+            to={mode === "material" ? "/write?kind=material" : "/write"}
+            className="my-2 rounded-full border border-sky-200 px-3 py-1 text-xs text-slate-700 hover:border-brand hover:text-brand"
+          >
+            + 새 {mode === "material" ? "자료" : "글"}
+          </Link>
+        )}
+      </nav>
 
       <div className="grid gap-8 md:grid-cols-[200px_1fr]">
         <BlogSidebar
@@ -170,7 +209,11 @@ export default function UserBlogView() {
                     return (
                       <li key={f.id}>
                         <Link
-                          to={`/u/${profile.username}?folder=${f.id}`}
+                          to={
+                            mode === "material"
+                              ? `/u/${profile.username}/materials?folder=${f.id}`
+                              : `/u/${profile.username}?folder=${f.id}`
+                          }
                           className="block rounded-xl border border-sky-100 bg-white p-5 shadow-sm transition hover:border-brand hover:shadow-md"
                         >
                           <div className="text-2xl">📁</div>
@@ -190,7 +233,9 @@ export default function UserBlogView() {
               );
             })()
           ) : posts.length === 0 ? (
-            <p className="py-10 text-center text-slate-500">아직 글이 없어요.</p>
+            <p className="py-10 text-center text-slate-500">
+              {mode === "material" ? "아직 자료가 없어요." : "아직 글이 없어요."}
+            </p>
           ) : (
             <ul className="divide-y divide-sky-100">
               {posts
@@ -205,7 +250,11 @@ export default function UserBlogView() {
                       className="flex items-start justify-between gap-4 py-5"
                     >
                       <Link
-                        to={`/u/${profile.username}/${p.id}`}
+                        to={
+                          mode === "material"
+                            ? `/u/${profile.username}/materials/${p.id}`
+                            : `/u/${profile.username}/${p.id}`
+                        }
                         className="block flex-1 group"
                       >
                         <div className="flex items-center gap-2 text-xs text-slate-500">

@@ -14,9 +14,16 @@ type Initial = {
   category: string | null;
   folderId?: string | null;
   published?: boolean;
+  kind?: "post" | "material";
 };
 
-export default function PostForm({ initial }: { initial?: Initial }) {
+export default function PostForm({
+  initial,
+  kind = "post",
+}: {
+  initial?: Initial;
+  kind?: "post" | "material";
+}) {
   const nav = useNavigate();
   const { user, profile } = useAuth();
   const [title, setTitle] = useState(initial?.title ?? "");
@@ -90,6 +97,12 @@ export default function PostForm({ initial }: { initial?: Initial }) {
     setSaving(true);
     const sb = supabase();
 
+    const effectiveKind = initial?.kind ?? kind;
+    const viewBase =
+      effectiveKind === "material"
+        ? `/u/${profile.username}/materials`
+        : `/u/${profile.username}`;
+
     if (initial?.id) {
       // 수정 — slug는 그대로 둠
       const { data, error } = await sb
@@ -110,15 +123,12 @@ export default function PostForm({ initial }: { initial?: Initial }) {
         setError(error.message);
         return;
       }
-      nav(`/u/${profile.username}/${(data as { id: string }).id}`);
+      nav(`${viewBase}/${(data as { id: string }).id}`);
     } else {
       // 새 글 — slug 생성, 충돌 시 -랜덤 접미사 추가
-      let baseSlug = slugify(title.trim());
+      const baseSlug = slugify(title.trim());
       let slug = baseSlug;
       let attempt = 0;
-      // RLS-safe: 본인 author_id로 직접 검사
-      // 충돌 시 nano 8자 추가
-      // (충돌은 보통 잘 안 일어나니 한 번이면 충분)
       while (attempt < 3) {
         const { data: existing } = await sb
           .from("posts")
@@ -142,6 +152,7 @@ export default function PostForm({ initial }: { initial?: Initial }) {
           category: category || null,
           folder_id: folderId || null,
           published,
+          kind: effectiveKind,
         })
         .select()
         .single();
@@ -150,7 +161,7 @@ export default function PostForm({ initial }: { initial?: Initial }) {
         setError(error.message);
         return;
       }
-      nav(`/u/${profile.username}/${(data as { id: string }).id}`);
+      nav(`${viewBase}/${(data as { id: string }).id}`);
     }
   };
 

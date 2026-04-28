@@ -54,6 +54,7 @@ export type Post = {
   category: string | null;
   folder_id: string | null;
   published: boolean;
+  kind: "post" | "material";
   created_at: string;
   updated_at: string;
 };
