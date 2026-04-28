@@ -13,6 +13,7 @@ type Props = {
   initialFolders: Folder[];
   selectedCategory: string | null;
   selectedFolder: string | null;
+  mode?: "post" | "material";
   onChange: (updates: { categories?: Category[]; folders?: Folder[] }) => void;
 };
 
@@ -34,6 +35,7 @@ export default function BlogSidebar({
   initialFolders,
   selectedCategory,
   selectedFolder,
+  mode = "post",
   onChange,
 }: Props) {
   const { user } = useAuth();
@@ -122,7 +124,12 @@ export default function BlogSidebar({
     if (!name || !user) return;
     const { data, error } = await supabase()
       .from("categories")
-      .insert({ user_id: user.id, name, sort_order: cats.length })
+      .insert({
+        user_id: user.id,
+        name,
+        sort_order: cats.length,
+        kind: mode,
+      })
       .select()
       .single();
     if (error) return alert(error.message);
@@ -148,17 +155,20 @@ export default function BlogSidebar({
       .eq("id", id);
     if (error) return alert(error.message);
     // posts와 folders의 category 텍스트도 같이 갱신
+    // — 같은 kind(글/자료) 내에서만 영향이 가도록 제한
     await Promise.all([
       sb
         .from("posts")
         .update({ category: next })
         .eq("author_id", user.id)
-        .eq("category", oldName),
+        .eq("category", oldName)
+        .eq("kind", mode),
       sb
         .from("folders")
         .update({ category: next })
         .eq("user_id", user.id)
-        .eq("category", oldName),
+        .eq("category", oldName)
+        .eq("kind", mode),
     ]);
     const updatedCats = cats.map((c) =>
       c.id === id ? { ...c, name: next } : c
@@ -228,6 +238,7 @@ export default function BlogSidebar({
       sort_order: fls.length,
       category: addTarget.category,
       parent_id: addTarget.kind === "folder" ? addTarget.parentId : null,
+      kind: mode,
     };
     const { data, error } = await supabase()
       .from("folders")
@@ -494,20 +505,24 @@ export default function BlogSidebar({
     onCancelRename: cancelRename,
     onRenameCategory: renameCategory,
     onRenameFolder: renameFolder,
+    mode,
   };
+
+  const baseHref =
+    mode === "material" ? `/u/${username}/materials` : `/u/${username}`;
 
   return (
     <aside className="space-y-4 text-sm">
       <div>
         <Link
-          to={`/u/${username}`}
+          to={baseHref}
           className={`block rounded px-2 py-1 ${
             !selectedCategory && !selectedFolder
               ? "bg-brand-light font-medium text-brand-dark"
               : "text-slate-700 hover:bg-sky-50"
           }`}
         >
-          전체 글
+          {mode === "material" ? "전체 자료" : "전체 글"}
         </Link>
       </div>
 
@@ -603,6 +618,7 @@ type SectionProps = {
   onCancelRename: () => void;
   onRenameCategory: (id: string, oldName: string) => Promise<void>;
   onRenameFolder: (id: string, oldName: string) => Promise<void>;
+  mode: "post" | "material";
 };
 
 function CategorySection(props: SectionProps) {
@@ -687,7 +703,11 @@ function CategorySection(props: SectionProps) {
           />
         ) : categoryName ? (
           <Link
-            to={`/u/${username}?category=${encodeURIComponent(categoryName)}`}
+            to={`${
+              props.mode === "material"
+                ? `/u/${username}/materials`
+                : `/u/${username}`
+            }?category=${encodeURIComponent(categoryName)}`}
             className={`flex-1 truncate rounded px-1 py-1 text-xs font-semibold uppercase tracking-wide ${
               selectedCategory === categoryName
                 ? "bg-brand-light text-brand-dark"
@@ -850,7 +870,11 @@ function FolderTreeItem({
           />
         ) : (
           <Link
-            to={`/u/${username}?folder=${node.id}`}
+            to={`${
+              rest.mode === "material"
+                ? `/u/${username}/materials`
+                : `/u/${username}`
+            }?folder=${node.id}`}
             className={`flex-1 truncate rounded px-1 py-1 ${
               selectedFolder === node.id
                 ? "bg-brand-light font-medium text-brand-dark"

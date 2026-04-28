@@ -38,20 +38,24 @@ export default function PostForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const effectiveKind = initial?.kind ?? kind;
+
   useEffect(() => {
     if (!user) return;
     const sb = supabase();
     sb.from("categories")
       .select("*")
       .eq("user_id", user.id)
+      .eq("kind", effectiveKind)
       .order("sort_order")
       .then(({ data }) => setCats((data ?? []) as Category[]));
     sb.from("folders")
       .select("*")
       .eq("user_id", user.id)
+      .eq("kind", effectiveKind)
       .order("sort_order")
       .then(({ data }) => setFolders((data ?? []) as Folder[]));
-  }, [user]);
+  }, [user, effectiveKind]);
 
   const addCategory = async () => {
     const name = newCat.trim();
@@ -97,7 +101,6 @@ export default function PostForm({
     setSaving(true);
     const sb = supabase();
 
-    const effectiveKind = initial?.kind ?? kind;
     const viewBase =
       effectiveKind === "material"
         ? `/u/${profile.username}/materials`

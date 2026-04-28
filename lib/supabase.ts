@@ -65,6 +65,7 @@ export type Folder = {
   name: string;
   category: string | null;
   parent_id: string | null;
+  kind: "post" | "material";
   sort_order: number;
   created_at: string;
 };
@@ -73,6 +74,7 @@ export type Category = {
   id: string;
   user_id: string;
   name: string;
+  kind: "post" | "material";
   sort_order: number;
   created_at: string;
 };

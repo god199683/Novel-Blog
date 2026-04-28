@@ -17,6 +17,8 @@ export default function DashboardView() {
   const [params] = useSearchParams();
   const selectedCategory = params.get("category");
   const selectedFolder = params.get("folder");
+  const mode: "post" | "material" =
+    params.get("kind") === "material" ? "material" : "post";
 
   const [rows, setRows] = useState<Post[]>([]);
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -30,18 +32,19 @@ export default function DashboardView() {
       setLoadingData(true);
       const sb = supabase();
 
-      // 폴더·카테고리 먼저 (폴더 클릭 시 하위까지 포함하기 위해)
       const [foldersRes, catsRes] = await Promise.all([
         sb
           .from("folders")
           .select("*")
           .eq("user_id", user.id)
+          .eq("kind", mode)
           .order("sort_order")
           .order("created_at", { ascending: false }),
         sb
           .from("categories")
           .select("*")
           .eq("user_id", user.id)
+          .eq("kind", mode)
           .order("sort_order")
           .order("created_at", { ascending: false }),
       ]);
@@ -54,6 +57,7 @@ export default function DashboardView() {
         .from("posts")
         .select("*")
         .eq("author_id", user.id)
+        .eq("kind", mode)
         .order("updated_at", { ascending: false });
       if (selectedCategory) q = q.eq("category", selectedCategory);
       if (selectedFolder) {
@@ -68,7 +72,7 @@ export default function DashboardView() {
     return () => {
       active = false;
     };
-  }, [user, selectedCategory, selectedFolder]);
+  }, [user, selectedCategory, selectedFolder, mode]);
 
   if (loading) return <p className="py-10 text-center text-slate-500">로딩...</p>;
   if (!user || !profile) return <Navigate to="/login" replace />;
@@ -79,9 +83,11 @@ export default function DashboardView() {
 
   return (
     <div>
-      <header className="mb-8 flex items-end justify-between">
+      <header className="mb-6 flex items-end justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">내 글 관리</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {mode === "material" ? "내 자료 관리" : "내 글 관리"}
+          </h1>
           <p className="mt-1 text-sm text-slate-500">
             <Link to={`/u/${profile.username}`} className="hover:text-brand">
               내 블로그 보기 →
@@ -89,17 +95,41 @@ export default function DashboardView() {
           </p>
         </div>
         <Link
-          to="/write"
+          to={mode === "material" ? "/write?kind=material" : "/write"}
           className="rounded-full bg-brand px-4 py-2 text-sm font-medium text-white hover:bg-brand-dark"
         >
-          + 새 글
+          + 새 {mode === "material" ? "자료" : "글"}
         </Link>
       </header>
+
+      <nav className="mb-6 flex items-center gap-1 border-b border-sky-100">
+        <Link
+          to="/dashboard"
+          className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
+            mode === "post"
+              ? "border-brand text-brand"
+              : "border-transparent text-slate-500 hover:text-brand"
+          }`}
+        >
+          글
+        </Link>
+        <Link
+          to="/dashboard?kind=material"
+          className={`-mb-px border-b-2 px-4 py-2 text-sm font-medium ${
+            mode === "material"
+              ? "border-brand text-brand"
+              : "border-transparent text-slate-500 hover:text-brand"
+          }`}
+        >
+          자료
+        </Link>
+      </nav>
 
       <div className="grid gap-8 md:grid-cols-[200px_1fr]">
         <BlogSidebar
           username={profile.username}
           isOwner={true}
+          mode={mode}
           initialCategories={categories}
           initialFolders={folders}
           selectedCategory={selectedCategory}

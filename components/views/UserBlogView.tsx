@@ -60,18 +60,20 @@ export default function UserBlogView({ mode = "post" }: Props) {
       setProfile(prof as Profile);
 
       // 폴더/카테고리 먼저 — 폴더 클릭 시 하위 폴더 ID까지 포함해서
-      // 글 쿼리를 만들기 때문에.
+      // 글 쿼리를 만들기 때문에. mode(글/자료)에 맞는 것만.
       const [foldersRes, catsRes] = await Promise.all([
         sb
           .from("folders")
           .select("*")
           .eq("user_id", (prof as Profile).id)
+          .eq("kind", mode)
           .order("sort_order")
           .order("created_at", { ascending: false }),
         sb
           .from("categories")
           .select("*")
           .eq("user_id", (prof as Profile).id)
+          .eq("kind", mode)
           .order("sort_order")
           .order("created_at", { ascending: false }),
       ]);
@@ -161,6 +163,7 @@ export default function UserBlogView({ mode = "post" }: Props) {
         <BlogSidebar
           username={profile.username}
           isOwner={isOwner}
+          mode={mode}
           initialCategories={categories}
           initialFolders={folders}
           selectedCategory={selectedCategory}
