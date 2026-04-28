@@ -49,6 +49,13 @@ export default function BlogSidebar({
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     new Set()
   );
+  // 이름 수정 중인 항목
+  const [editing, setEditing] = useState<
+    | { kind: "category"; id: string }
+    | { kind: "folder"; id: string }
+    | null
+  >(null);
+  const [editName, setEditName] = useState("");
 
   useEffect(() => setCats(initialCategories), [initialCategories]);
   useEffect(() => setFls(initialFolders), [initialFolders]);
@@ -124,6 +131,73 @@ export default function BlogSidebar({
     setNewCat("");
     onChange({ categories: updated });
   };
+
+  // 카테고리 이름 변경 — 같은 사용자의 posts.category, folders.category까지 함께 갱신
+  const renameCategory = async (id: string, oldName: string) => {
+    const next = editName.trim();
+    setEditing(null);
+    if (!next || !user || next === oldName) return;
+    if (cats.some((c) => c.id !== id && c.name === next)) {
+      alert("같은 이름의 카테고리가 이미 있어요");
+      return;
+    }
+    const sb = supabase();
+    const { error } = await sb
+      .from("categories")
+      .update({ name: next })
+      .eq("id", id);
+    if (error) return alert(error.message);
+    // posts와 folders의 category 텍스트도 같이 갱신
+    await Promise.all([
+      sb
+        .from("posts")
+        .update({ category: next })
+        .eq("author_id", user.id)
+        .eq("category", oldName),
+      sb
+        .from("folders")
+        .update({ category: next })
+        .eq("user_id", user.id)
+        .eq("category", oldName),
+    ]);
+    const updatedCats = cats.map((c) =>
+      c.id === id ? { ...c, name: next } : c
+    );
+    const updatedFolders = fls.map((f) =>
+      f.category === oldName ? { ...f, category: next } : f
+    );
+    setCats(updatedCats);
+    setFls(updatedFolders);
+    onChange({ categories: updatedCats, folders: updatedFolders });
+  };
+
+  const renameFolder = async (id: string, oldName: string) => {
+    const next = editName.trim();
+    setEditing(null);
+    if (!next || !user || next === oldName) return;
+    if (fls.some((f) => f.id !== id && f.name === next)) {
+      alert("같은 이름의 폴더가 이미 있어요");
+      return;
+    }
+    const { error } = await supabase()
+      .from("folders")
+      .update({ name: next })
+      .eq("id", id);
+    if (error) return alert(error.message);
+    const updated = fls.map((f) => (f.id === id ? { ...f, name: next } : f));
+    setFls(updated);
+    onChange({ folders: updated });
+  };
+
+  const beginRename = (
+    kind: "category" | "folder",
+    id: string,
+    name: string
+  ) => {
+    setEditing({ kind, id } as typeof editing);
+    setEditName(name);
+  };
+  const cancelRename = () => setEditing(null);
 
   const deleteCategory = async (id: string, name: string) => {
     if (
@@ -413,6 +487,13 @@ export default function BlogSidebar({
     collapsedFolders,
     toggleCategory,
     toggleFolder,
+    editing,
+    editName,
+    setEditName,
+    onBeginRename: beginRename,
+    onCancelRename: cancelRename,
+    onRenameCategory: renameCategory,
+    onRenameFolder: renameFolder,
   };
 
   return (
@@ -434,6 +515,7 @@ export default function BlogSidebar({
         {cats.map((c) => (
           <CategorySection
             key={c.id}
+            categoryId={c.id}
             categoryName={c.name}
             roots={rootByCategory.get(c.name) ?? []}
             allFolders={fls}
@@ -441,7 +523,6 @@ export default function BlogSidebar({
             {...sectionProps}
           />
         ))}
-
       </div>
 
       {isOwner && (
@@ -481,6 +562,7 @@ export default function BlogSidebar({
 
 type SectionProps = {
   categoryName: string | null;
+  categoryId?: string | null;
   username: string;
   isOwner: boolean;
   roots: FolderNode[];
@@ -507,6 +589,20 @@ type SectionProps = {
   collapsedFolders: Set<string>;
   toggleCategory: (name: string | null) => void;
   toggleFolder: (id: string) => void;
+  editing:
+    | { kind: "category"; id: string }
+    | { kind: "folder"; id: string }
+    | null;
+  editName: string;
+  setEditName: (v: string) => void;
+  onBeginRename: (
+    kind: "category" | "folder",
+    id: string,
+    name: string
+  ) => void;
+  onCancelRename: () => void;
+  onRenameCategory: (id: string, oldName: string) => Promise<void>;
+  onRenameFolder: (id: string, oldName: string) => Promise<void>;
 };
 
 function CategorySection(props: SectionProps) {
@@ -523,6 +619,13 @@ function CategorySection(props: SectionProps) {
     onCategoryDrop,
     collapsedCats,
     toggleCategory,
+    categoryId,
+    editing,
+    editName,
+    setEditName,
+    onBeginRename,
+    onCancelRename,
+    onRenameCategory,
   } = props;
 
   const isAddingHere =
@@ -532,6 +635,10 @@ function CategorySection(props: SectionProps) {
   const collapseKey = categoryName ?? "__none__";
   const collapsed = collapsedCats.has(collapseKey);
   const hasChildren = roots.length > 0;
+  const isRenaming =
+    !!categoryId &&
+    editing?.kind === "category" &&
+    editing.id === categoryId;
 
   return (
     <div>
@@ -558,7 +665,27 @@ function CategorySection(props: SectionProps) {
             ▶
           </span>
         </button>
-        {categoryName ? (
+        {isRenaming && categoryName ? (
+          <input
+            autoFocus
+            type="text"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                if (categoryId) onRenameCategory(categoryId, categoryName);
+              } else if (e.key === "Escape") {
+                onCancelRename();
+              }
+            }}
+            onBlur={() => {
+              if (categoryId) onRenameCategory(categoryId, categoryName);
+            }}
+            maxLength={30}
+            className="flex-1 rounded border border-brand bg-white px-1 py-1 text-xs font-semibold uppercase tracking-wide text-slate-700 focus:outline-none"
+          />
+        ) : categoryName ? (
           <Link
             to={`/u/${username}?category=${encodeURIComponent(categoryName)}`}
             className={`flex-1 truncate rounded px-1 py-1 text-xs font-semibold uppercase tracking-wide ${
@@ -574,7 +701,7 @@ function CategorySection(props: SectionProps) {
             분류 없음
           </span>
         )}
-        {isOwner && (
+        {isOwner && !isRenaming && (
           <div className="flex items-center gap-0.5">
             <button
               type="button"
@@ -586,6 +713,18 @@ function CategorySection(props: SectionProps) {
             >
               +
             </button>
+            {categoryName && categoryId && (
+              <button
+                type="button"
+                onClick={() =>
+                  onBeginRename("category", categoryId, categoryName)
+                }
+                title="이름 수정"
+                className="hidden rounded px-1 text-xs text-slate-400 hover:text-brand group-hover:block"
+              >
+                ✎
+              </button>
+            )}
             {categoryName && props.onDeleteCategory && (
               <button
                 type="button"
@@ -634,6 +773,12 @@ function FolderTreeItem({
     onFolderDrop,
     collapsedFolders,
     toggleFolder,
+    editing,
+    editName,
+    setEditName,
+    onBeginRename,
+    onCancelRename,
+    onRenameFolder,
   } = rest;
 
   const isAddingHere =
@@ -643,6 +788,7 @@ function FolderTreeItem({
     dropHint?.kind === "folder" && dropHint.id === node.id ? dropHint : null;
   const hasChildren = node.children.length > 0;
   const collapsed = collapsedFolders.has(node.id);
+  const isRenaming = editing?.kind === "folder" && editing.id === node.id;
 
   return (
     <li>
@@ -684,17 +830,37 @@ function FolderTreeItem({
             ▶
           </span>
         </button>
-        <Link
-          to={`/u/${username}?folder=${node.id}`}
-          className={`flex-1 truncate rounded px-1 py-1 ${
-            selectedFolder === node.id
-              ? "bg-brand-light font-medium text-brand-dark"
-              : "text-slate-600 hover:bg-sky-50"
-          }`}
-        >
-          📁 {node.name}
-        </Link>
-        {isOwner && (
+        {isRenaming ? (
+          <input
+            autoFocus
+            type="text"
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                onRenameFolder(node.id, node.name);
+              } else if (e.key === "Escape") {
+                onCancelRename();
+              }
+            }}
+            onBlur={() => onRenameFolder(node.id, node.name)}
+            maxLength={30}
+            className="flex-1 rounded border border-brand bg-white px-1 py-1 text-sm text-slate-700 focus:outline-none"
+          />
+        ) : (
+          <Link
+            to={`/u/${username}?folder=${node.id}`}
+            className={`flex-1 truncate rounded px-1 py-1 ${
+              selectedFolder === node.id
+                ? "bg-brand-light font-medium text-brand-dark"
+                : "text-slate-600 hover:bg-sky-50"
+            }`}
+          >
+            📁 {node.name}
+          </Link>
+        )}
+        {isOwner && !isRenaming && (
           <div className="flex items-center gap-0.5">
             <button
               type="button"
@@ -709,6 +875,14 @@ function FolderTreeItem({
               className="hidden rounded px-1 text-xs text-slate-400 hover:text-brand group-hover:block"
             >
               +
+            </button>
+            <button
+              type="button"
+              onClick={() => onBeginRename("folder", node.id, node.name)}
+              title="이름 수정"
+              className="hidden rounded px-1 text-xs text-slate-400 hover:text-brand group-hover:block"
+            >
+              ✎
             </button>
             <button
               type="button"
