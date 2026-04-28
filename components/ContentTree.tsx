@@ -112,6 +112,12 @@ export default function ContentTree({
     return map;
   }, [posts]);
 
+  // 카테고리에 속하지 않는(또는 사라진 카테고리를 가리키는) 최상위 폴더
+  const orphanRootFolders = useMemo(() => {
+    const validCats = new Set(categories.map((c) => c.name));
+    return tree.filter((n) => !n.category || !validCats.has(n.category));
+  }, [tree, categories]);
+
   // 카테고리도 폴더도 없는 글
   const orphanPosts = useMemo(
     () => posts.filter((p) => !p.folder_id && !p.category),
@@ -159,7 +165,11 @@ export default function ContentTree({
     );
   }
 
-  if (visibleCategories.length === 0 && orphanPosts.length === 0) {
+  if (
+    visibleCategories.length === 0 &&
+    orphanPosts.length === 0 &&
+    orphanRootFolders.length === 0
+  ) {
     return (
       <p className="py-10 text-center text-slate-500">
         {mode === "material" ? "아직 자료가 없어요." : "아직 글이 없어요."}
@@ -249,33 +259,49 @@ export default function ContentTree({
         );
       })}
 
-      {/* 카테고리도 폴더도 없는 글들 */}
-      {!selectedCategory && orphanPosts.length > 0 && (
-        <section className="rounded-lg border border-dashed border-sky-200 bg-white/60">
-          <header className="border-b border-sky-100 px-3 py-2">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-              분류 없음
-            </h2>
-          </header>
-          <ul className="space-y-1 px-2 py-2">
-            {orphanPosts
-              .filter((p) => isOwner || p.published)
-              .map((p) => (
-                <PostRow
-                  key={p.id}
-                  post={p}
+      {/* 카테고리에 속하지 않은 폴더 + 카테고리·폴더 둘 다 없는 글 */}
+      {!selectedCategory &&
+        (orphanRootFolders.length > 0 || orphanPosts.length > 0) && (
+          <section className="rounded-lg border border-dashed border-sky-200 bg-white/60">
+            <header className="border-b border-sky-100 px-3 py-2">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+                분류 없음
+              </h2>
+            </header>
+            <ul className="space-y-1 px-2 py-2">
+              {orphanPosts
+                .filter((p) => isOwner || p.published)
+                .map((p) => (
+                  <PostRow
+                    key={p.id}
+                    post={p}
+                    depth={0}
+                    username={username}
+                    mode={mode}
+                    isOwner={isOwner}
+                    folders={folders}
+                    onPostDeleted={onPostDeleted}
+                    onPostToggled={onPostToggled}
+                  />
+                ))}
+              {orphanRootFolders.map((node) => (
+                <FolderNodeView
+                  key={node.id}
+                  node={node}
                   depth={0}
                   username={username}
                   mode={mode}
                   isOwner={isOwner}
-                  folders={folders}
+                  collapsedFolders={collapsedFolders}
+                  toggleFolder={toggleFolder}
+                  postsByFolder={postsByFolder}
                   onPostDeleted={onPostDeleted}
                   onPostToggled={onPostToggled}
                 />
               ))}
-          </ul>
-        </section>
-      )}
+            </ul>
+          </section>
+        )}
     </div>
   );
 }
