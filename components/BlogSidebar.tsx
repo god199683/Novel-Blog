@@ -227,6 +227,35 @@ export default function BlogSidebar({
   const beginAdd = (target: AddTarget) => {
     setAddTarget(target);
     setNewFolderName("");
+    // 새로 추가될 위치가 접혀 있으면 자동으로 펼침 — 입력창을 즉시 볼 수 있도록
+    if (target.kind === "category") {
+      const key = target.category ?? "__none__";
+      setCollapsedCats((prev) => {
+        if (!prev.has(key)) return prev;
+        const next = new Set(prev);
+        next.delete(key);
+        try {
+          window.localStorage.setItem(
+            "nb_sidebar_collapsed_cats",
+            JSON.stringify(Array.from(next))
+          );
+        } catch {}
+        return next;
+      });
+    } else {
+      setCollapsedFolders((prev) => {
+        if (!prev.has(target.parentId)) return prev;
+        const next = new Set(prev);
+        next.delete(target.parentId);
+        try {
+          window.localStorage.setItem(
+            "nb_sidebar_collapsed_folders",
+            JSON.stringify(Array.from(next))
+          );
+        } catch {}
+        return next;
+      });
+    }
   };
 
   const addFolder = async () => {
@@ -670,8 +699,8 @@ function CategorySection(props: SectionProps) {
           onClick={() => toggleCategory(categoryName)}
           title={collapsed ? "펼치기" : "접기"}
           aria-label={collapsed ? "펼치기" : "접기"}
-          className={`flex h-6 w-5 items-center justify-center text-slate-400 hover:text-slate-700 ${
-            !hasChildren ? "invisible" : ""
+          className={`flex h-6 w-5 items-center justify-center hover:text-slate-700 ${
+            hasChildren ? "text-slate-400" : "text-slate-200"
           }`}
         >
           <span
@@ -759,15 +788,14 @@ function CategorySection(props: SectionProps) {
         )}
       </div>
 
+      {/* AddFolderInput은 접힘 상태와 무관하게 보여줘서 + 누르면 항상 입력 가능 */}
+      {isAddingHere && <AddFolderInput {...props} />}
       {!collapsed && (
-        <>
-          {isAddingHere && <AddFolderInput {...props} />}
-          <ul className="mt-1 space-y-0.5">
-            {roots.map((node) => (
-              <FolderTreeItem key={node.id} node={node} depth={0} {...props} />
-            ))}
-          </ul>
-        </>
+        <ul className="mt-1 space-y-0.5">
+          {roots.map((node) => (
+            <FolderTreeItem key={node.id} node={node} depth={0} {...props} />
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -839,8 +867,8 @@ function FolderTreeItem({
           title={collapsed ? "펼치기" : "접기"}
           aria-label={collapsed ? "펼치기" : "접기"}
           style={{ marginLeft: depth * 14 }}
-          className={`flex h-6 w-5 items-center justify-center text-slate-400 hover:text-slate-700 ${
-            !hasChildren ? "invisible" : ""
+          className={`flex h-6 w-5 items-center justify-center hover:text-slate-700 ${
+            hasChildren ? "text-slate-400" : "text-slate-200"
           }`}
         >
           <span
@@ -927,6 +955,7 @@ function FolderTreeItem({
         />
       )}
 
+      {/* 하위 폴더 추가 입력은 접힘 상태와 무관하게 보임 */}
       {isAddingHere && (
         <div style={{ paddingLeft: 8 + (depth + 1) * 14 }}>
           <AddFolderInput {...rest} />

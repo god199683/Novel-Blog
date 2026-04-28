@@ -16,7 +16,7 @@ import {
 import { useAuth } from "@/lib/AuthContext";
 import { descendantIds } from "@/lib/folders";
 import BlogSidebar from "@/components/BlogSidebar";
-import PostActions from "@/components/PostActions";
+import ContentTree from "@/components/ContentTree";
 
 type Props = { mode?: "post" | "material" };
 
@@ -191,127 +191,24 @@ export default function UserBlogView({ mode = "post" }: Props) {
               )}
             </p>
           )}
-          {selectedCategory && !selectedFolder ? (
-            (() => {
-              const topLevel = folders.filter(
-                (f) => !f.parent_id && f.category === selectedCategory
-              );
-              if (topLevel.length === 0) {
-                return (
-                  <p className="py-10 text-center text-slate-500">
-                    이 카테고리에 폴더가 없어요.
-                  </p>
-                );
-              }
-              return (
-                <ul className="grid gap-3 sm:grid-cols-2">
-                  {topLevel.map((f) => {
-                    const childCount = folders.filter(
-                      (x) => x.parent_id === f.id
-                    ).length;
-                    return (
-                      <li key={f.id}>
-                        <Link
-                          to={
-                            mode === "material"
-                              ? `/u/${profile.username}/materials?folder=${f.id}`
-                              : `/u/${profile.username}?folder=${f.id}`
-                          }
-                          className="block rounded-xl border border-sky-100 bg-white p-5 shadow-sm transition hover:border-brand hover:shadow-md"
-                        >
-                          <div className="text-2xl">📁</div>
-                          <div className="mt-2 font-semibold text-slate-900">
-                            {f.name}
-                          </div>
-                          {childCount > 0 && (
-                            <div className="mt-1 text-xs text-slate-500">
-                              하위 폴더 {childCount}개
-                            </div>
-                          )}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              );
-            })()
-          ) : posts.length === 0 ? (
-            <p className="py-10 text-center text-slate-500">
-              {mode === "material" ? "아직 자료가 없어요." : "아직 글이 없어요."}
-            </p>
-          ) : (
-            <ul className="divide-y divide-sky-100">
-              {posts
-                .filter((p) => isOwner || p.published)
-                .map((p) => {
-                  const folder = p.folder_id
-                    ? folders.find((f) => f.id === p.folder_id)
-                    : null;
-                  return (
-                    <li
-                      key={p.id}
-                      className="flex items-start justify-between gap-4 py-5"
-                    >
-                      <Link
-                        to={
-                          mode === "material"
-                            ? `/u/${profile.username}/materials/${p.id}`
-                            : `/u/${profile.username}/${p.id}`
-                        }
-                        className="block flex-1 group"
-                      >
-                        <div className="flex items-center gap-2 text-xs text-slate-500">
-                          {!p.published && (
-                            <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700">
-                              비공개
-                            </span>
-                          )}
-                          {p.category && (
-                            <span className="rounded-full bg-brand-light px-2 py-0.5 text-brand-dark">
-                              {p.category}
-                            </span>
-                          )}
-                          {folder && (
-                            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-slate-600 ring-1 ring-sky-200">
-                              📁 {folder.name}
-                            </span>
-                          )}
-                          <time>{p.created_at.slice(0, 10)}</time>
-                        </div>
-                        <h2 className="mt-1 text-xl font-bold text-slate-900 group-hover:text-brand">
-                          {p.title}
-                        </h2>
-                        {p.excerpt && (
-                          <p className="mt-1 line-clamp-2 text-sm text-slate-600">
-                            {p.excerpt}
-                          </p>
-                        )}
-                      </Link>
-                      {isOwner && (
-                        <PostActions
-                          postId={p.id}
-                          title={p.title}
-                          published={p.published}
-                          onChanged={(action) => {
-                            if (action === "deleted") {
-                              setPosts((ps) => ps.filter((x) => x.id !== p.id));
-                            } else if (action === "toggled") {
-                              setPosts((ps) =>
-                                ps.map((x) =>
-                                  x.id === p.id
-                                    ? { ...x, published: !x.published }
-                                    : x
-                                )
-                              );
-                            }
-                          }}
-                        />
-                      )}
-                    </li>
-                  );
-                })}
-            </ul>
-          )}
+          <ContentTree
+            username={profile.username}
+            mode={mode}
+            isOwner={isOwner}
+            posts={posts}
+            folders={folders}
+            categories={categories}
+            selectedCategory={selectedCategory}
+            selectedFolder={selectedFolder}
+            onPostDeleted={(id) =>
+              setPosts((ps) => ps.filter((x) => x.id !== id))
+            }
+            onPostToggled={(id) =>
+              setPosts((ps) =>
+                ps.map((x) => (x.id === id ? { ...x, published: !x.published } : x))
+              )
+            }
+          />
         </div>
       </div>
     </div>
