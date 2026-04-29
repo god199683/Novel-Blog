@@ -82,18 +82,14 @@ export default function UserBlogView({ mode = "post" }: Props) {
       setFolders(folderRows);
       setCategories((catsRes.data ?? []) as Category[]);
 
-      let q = sb
+      // 모든 글을 한 번에 가져옴 — 사이드바 트리에 전체가 보여야 하기 때문.
+      // 카테고리/폴더 필터링은 본문(ContentTree)이 클라이언트 측에서 처리.
+      const postsRes = await sb
         .from("posts")
         .select("*")
         .eq("author_id", (prof as Profile).id)
         .eq("kind", mode)
         .order("created_at", { ascending: false });
-      if (selectedCategory) q = q.eq("category", selectedCategory);
-      if (selectedFolder) {
-        const ids = descendantIds(folderRows, selectedFolder);
-        q = q.in("folder_id", ids);
-      }
-      const postsRes = await q;
       if (!active) return;
       setPosts((postsRes.data ?? []) as Post[]);
       setLoading(false);
@@ -168,6 +164,7 @@ export default function UserBlogView({ mode = "post" }: Props) {
           initialFolders={folders}
           selectedCategory={selectedCategory}
           selectedFolder={selectedFolder}
+          posts={posts}
           onChange={(updates) => {
             if (updates.categories) setCategories(updates.categories);
             if (updates.folders) setFolders(updates.folders);

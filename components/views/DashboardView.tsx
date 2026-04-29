@@ -53,18 +53,14 @@ export default function DashboardView() {
       setFolders(folderRows);
       setCategories((catsRes.data ?? []) as Category[]);
 
-      let q = sb
+      // 사이드바에 전체 트리가 보여야 하므로 필터 없이 모든 글을 가져옴.
+      // 본문 ContentTree가 selectedCategory/selectedFolder로 좁힘.
+      const { data: postRows } = await sb
         .from("posts")
         .select("*")
         .eq("author_id", user.id)
         .eq("kind", mode)
         .order("updated_at", { ascending: false });
-      if (selectedCategory) q = q.eq("category", selectedCategory);
-      if (selectedFolder) {
-        const ids = descendantIds(folderRows, selectedFolder);
-        q = q.in("folder_id", ids);
-      }
-      const { data: postRows } = await q;
       if (!active) return;
       setRows((postRows ?? []) as Post[]);
       setLoadingData(false);
@@ -134,6 +130,7 @@ export default function DashboardView() {
           initialFolders={folders}
           selectedCategory={selectedCategory}
           selectedFolder={selectedFolder}
+          posts={rows}
           onChange={(updates) => {
             if (updates.categories) setCategories(updates.categories);
             if (updates.folders) setFolders(updates.folders);
@@ -157,17 +154,32 @@ export default function DashboardView() {
               )}
             </p>
           )}
-          {loadingData ? (
-            <p className="py-10 text-center text-slate-500">불러오는 중...</p>
-          ) : rows.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-sky-200 bg-white/60 p-10 text-center text-slate-500">
-              {selectedCategory || selectedFolder
-                ? "이 분류에 해당하는 글이 없어요."
-                : "아직 쓴 글이 없어요."}
-            </div>
-          ) : (
-            <ul className="divide-y divide-sky-100">
-              {rows.map((p) => {
+          {(() => {
+            const filtered = rows.filter((p) => {
+              if (selectedCategory && p.category !== selectedCategory) return false;
+              if (selectedFolder) {
+                const ids = descendantIds(folders, selectedFolder);
+                if (!p.folder_id || !ids.includes(p.folder_id)) return false;
+              }
+              return true;
+            });
+            if (loadingData) {
+              return (
+                <p className="py-10 text-center text-slate-500">불러오는 중...</p>
+              );
+            }
+            if (filtered.length === 0) {
+              return (
+                <div className="rounded-lg border border-dashed border-sky-200 bg-white/60 p-10 text-center text-slate-500">
+                  {selectedCategory || selectedFolder
+                    ? "이 분류에 해당하는 글이 없어요."
+                    : "아직 쓴 글이 없어요."}
+                </div>
+              );
+            }
+            return (
+              <ul className="divide-y divide-sky-100">
+                {filtered.map((p) => {
                 const folder = p.folder_id
                   ? folders.find((f) => f.id === p.folder_id)
                   : null;
@@ -221,7 +233,8 @@ export default function DashboardView() {
                 );
               })}
             </ul>
-          )}
+            );
+          })()}
         </div>
       </div>
     </div>

@@ -2,7 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { supabase, type Category, type Folder } from "@/lib/supabase";
+import {
+  supabase,
+  type Category,
+  type Folder,
+  type Post,
+} from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { buildTree, descendantIds, type FolderNode } from "@/lib/folders";
 
@@ -14,6 +19,7 @@ type Props = {
   selectedCategory: string | null;
   selectedFolder: string | null;
   mode?: "post" | "material";
+  posts?: Post[];
   onChange: (updates: { categories?: Category[]; folders?: Folder[] }) => void;
 };
 
@@ -36,6 +42,7 @@ export default function BlogSidebar({
   selectedCategory,
   selectedFolder,
   mode = "post",
+  posts = [],
   onChange,
 }: Props) {
   const { user } = useAuth();
@@ -104,6 +111,31 @@ export default function BlogSidebar({
   };
 
   const tree = useMemo(() => buildTree(fls), [fls]);
+
+  // folder_id → 그 폴더에 속한 글들
+  const postsByFolder = useMemo(() => {
+    const map = new Map<string, Post[]>();
+    for (const p of posts) {
+      if (!p.folder_id) continue;
+      const list = map.get(p.folder_id) ?? [];
+      list.push(p);
+      map.set(p.folder_id, list);
+    }
+    return map;
+  }, [posts]);
+
+  // 카테고리 이름 → 그 카테고리만 가지고 폴더는 없는 글들
+  const postsDirectInCategory = useMemo(() => {
+    const map = new Map<string, Post[]>();
+    for (const p of posts) {
+      if (p.folder_id) continue;
+      if (!p.category) continue;
+      const list = map.get(p.category) ?? [];
+      list.push(p);
+      map.set(p.category, list);
+    }
+    return map;
+  }, [posts]);
 
   const rootByCategory = useMemo(() => {
     const validCats = new Set(cats.map((c) => c.name));
@@ -535,6 +567,8 @@ export default function BlogSidebar({
     onRenameCategory: renameCategory,
     onRenameFolder: renameFolder,
     mode,
+    postsByFolder,
+    postsDirectInCategory,
   };
 
   const baseHref =
@@ -648,6 +682,8 @@ type SectionProps = {
   onRenameCategory: (id: string, oldName: string) => Promise<void>;
   onRenameFolder: (id: string, oldName: string) => Promise<void>;
   mode: "post" | "material";
+  postsByFolder: Map<string, Post[]>;
+  postsDirectInCategory: Map<string, Post[]>;
 };
 
 function CategorySection(props: SectionProps) {
@@ -792,6 +828,20 @@ function CategorySection(props: SectionProps) {
       {isAddingHere && <AddFolderInput {...props} />}
       {!collapsed && (
         <ul className="mt-1 space-y-0.5">
+          {/* 폴더 없이 이 카테고리에만 속한 글 */}
+          {categoryName &&
+            (props.postsDirectInCategory.get(categoryName) ?? [])
+              .filter((p) => isOwner || p.published)
+              .map((p) => (
+                <PostLeaf
+                  key={p.id}
+                  post={p}
+                  depth={0}
+                  username={username}
+                  mode={props.mode}
+                  selectedFolder={null}
+                />
+              ))}
           {roots.map((node) => (
             <FolderTreeItem key={node.id} node={node} depth={0} {...props} />
           ))}
@@ -834,7 +884,10 @@ function FolderTreeItem({
   const isDragging = draggingId === node.id;
   const folderHint =
     dropHint?.kind === "folder" && dropHint.id === node.id ? dropHint : null;
-  const hasChildren = node.children.length > 0;
+  const directPosts = (rest.postsByFolder.get(node.id) ?? []).filter(
+    (p) => isOwner || p.published
+  );
+  const hasChildren = node.children.length > 0 || directPosts.length > 0;
   const collapsed = collapsedFolders.has(node.id);
   const isRenaming = editing?.kind === "folder" && editing.id === node.id;
 
@@ -964,6 +1017,17 @@ function FolderTreeItem({
 
       {hasChildren && !collapsed && (
         <ul className="space-y-0.5">
+          {/* 폴더에 직접 속한 글 */}
+          {directPosts.map((p) => (
+            <PostLeaf
+              key={p.id}
+              post={p}
+              depth={depth + 1}
+              username={username}
+              mode={rest.mode}
+              selectedFolder={selectedFolder}
+            />
+          ))}
           {node.children.map((child) => (
             <FolderTreeItem
               key={child.id}
@@ -974,6 +1038,53 @@ function FolderTreeItem({
           ))}
         </ul>
       )}
+    </li>
+  );
+}
+
+// =====================================================================
+//  PostLeaf — 사이드바에 글 한 줄
+// =====================================================================
+
+function PostLeaf({
+  post,
+  depth,
+  username,
+  mode,
+  selectedFolder,
+}: {
+  post: Post;
+  depth: number;
+  username: string;
+  mode: "post" | "material";
+  selectedFolder: string | null;
+}) {
+  const href =
+    mode === "material"
+      ? `/u/${username}/materials/${post.id}`
+      : `/u/${username}/${post.id}`;
+  const isHere =
+    typeof window !== "undefined" &&
+    window.location.hash &&
+    window.location.hash.includes(post.id);
+  return (
+    <li>
+      <Link
+        to={href}
+        title={post.title}
+        style={{ paddingLeft: 8 + depth * 14 + 20 }}
+        className={`flex items-center gap-1 truncate rounded py-1 pr-1 text-xs ${
+          isHere
+            ? "bg-brand-light text-brand-dark"
+            : "text-slate-500 hover:bg-sky-50 hover:text-slate-700"
+        }`}
+      >
+        <span className="text-slate-300">📄</span>
+        <span className="flex-1 truncate">
+          {!post.published && <span className="text-amber-600">🔒 </span>}
+          {post.title}
+        </span>
+      </Link>
     </li>
   );
 }
