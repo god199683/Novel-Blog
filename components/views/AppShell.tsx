@@ -52,6 +52,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   지도
                 </Link>
                 <Link
+                  to="/systems"
+                  className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
+                >
+                  시스템
+                </Link>
+                <Link
                   to="/account"
                   className="rounded-full px-3 py-1.5 text-slate-700 hover:bg-sky-50"
                 >

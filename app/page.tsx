@@ -16,6 +16,9 @@ import AccountView from "@/components/views/AccountView";
 import MapsListView from "@/components/views/MapsListView";
 import MapEditView from "@/components/views/MapEditView";
 import UserMapView from "@/components/views/UserMapView";
+import SystemsListView from "@/components/views/SystemsListView";
+import SystemEditView from "@/components/views/SystemEditView";
+import UserSystemView from "@/components/views/UserSystemView";
 
 export default function Page() {
   // HashRouter touches `document` on construction, which isn't available
@@ -49,6 +52,13 @@ export default function Page() {
             <Route
               path="/u/:username/maps/:id"
               element={<UserMapView />}
+            />
+            <Route path="/systems" element={<SystemsListView />} />
+            <Route path="/systems/new" element={<SystemEditView />} />
+            <Route path="/systems/edit/:id" element={<SystemEditView />} />
+            <Route
+              path="/u/:username/systems/:id"
+              element={<UserSystemView />}
             />
             <Route path="/u/:username" element={<UserBlogView mode="post" />} />
             <Route
