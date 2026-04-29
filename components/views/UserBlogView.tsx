@@ -103,10 +103,6 @@ export default function UserBlogView({ mode = "post" }: Props) {
   if (notFound) return <p className="py-10 text-center text-slate-500">사용자를 찾을 수 없어요</p>;
   if (!profile) return null;
 
-  const folderName = selectedFolder
-    ? folders.find((f) => f.id === selectedFolder)?.name
-    : null;
-
   const blogPath = `/u/${profile.username}`;
   const materialsPath = `/u/${profile.username}/materials`;
 
@@ -172,20 +168,10 @@ export default function UserBlogView({ mode = "post" }: Props) {
         />
 
         <div>
-          {(selectedCategory || folderName) && (
+          {selectedCategory && (
             <p className="mb-4 text-sm text-slate-500">
-              {selectedCategory && (
-                <span className="mr-2">
-                  카테고리:{" "}
-                  <strong className="text-slate-700">{selectedCategory}</strong>
-                </span>
-              )}
-              {folderName && (
-                <span>
-                  폴더:{" "}
-                  <strong className="text-slate-700">📁 {folderName}</strong>
-                </span>
-              )}
+              카테고리:{" "}
+              <strong className="text-slate-700">{selectedCategory}</strong>
             </p>
           )}
           <ContentTree

@@ -73,10 +73,6 @@ export default function DashboardView() {
   if (loading) return <p className="py-10 text-center text-slate-500">로딩...</p>;
   if (!user || !profile) return <Navigate to="/login" replace />;
 
-  const folderName = selectedFolder
-    ? folders.find((f) => f.id === selectedFolder)?.name
-    : null;
-
   return (
     <div>
       <header className="mb-6 flex items-end justify-between">
@@ -138,20 +134,10 @@ export default function DashboardView() {
         />
 
         <div>
-          {(selectedCategory || folderName) && (
+          {selectedCategory && (
             <p className="mb-4 text-sm text-slate-500">
-              {selectedCategory && (
-                <span className="mr-2">
-                  카테고리:{" "}
-                  <strong className="text-slate-700">{selectedCategory}</strong>
-                </span>
-              )}
-              {folderName && (
-                <span>
-                  폴더:{" "}
-                  <strong className="text-slate-700">📁 {folderName}</strong>
-                </span>
-              )}
+              카테고리:{" "}
+              <strong className="text-slate-700">{selectedCategory}</strong>
             </p>
           )}
           {(() => {
