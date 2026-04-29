@@ -85,3 +85,51 @@ export type UserFont = {
   name: string;
   created_at: string;
 };
+
+export type MapPin = {
+  id: string;
+  x: number;
+  y: number;
+  name: string;
+  color: string;
+  description?: string;
+};
+
+export type MapRect = {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label?: string;
+  color: string;
+};
+
+export type MapLine = {
+  id: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  color: string;
+  thickness: number;
+};
+
+export type MapData = {
+  pins: MapPin[];
+  rects: MapRect[];
+  lines: MapLine[];
+};
+
+export type NovelMap = {
+  id: string;
+  author_id: string;
+  title: string;
+  data: MapData;
+  width: number;
+  height: number;
+  background_color: string;
+  published: boolean;
+  created_at: string;
+  updated_at: string;
+};
