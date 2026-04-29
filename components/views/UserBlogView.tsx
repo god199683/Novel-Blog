@@ -168,12 +168,6 @@ export default function UserBlogView({ mode = "post" }: Props) {
         />
 
         <div>
-          {selectedCategory && (
-            <p className="mb-4 text-sm text-slate-500">
-              카테고리:{" "}
-              <strong className="text-slate-700">{selectedCategory}</strong>
-            </p>
-          )}
           <ContentTree
             username={profile.username}
             mode={mode}

@@ -134,12 +134,6 @@ export default function DashboardView() {
         />
 
         <div>
-          {selectedCategory && (
-            <p className="mb-4 text-sm text-slate-500">
-              카테고리:{" "}
-              <strong className="text-slate-700">{selectedCategory}</strong>
-            </p>
-          )}
           {(() => {
             const filtered = rows.filter((p) => {
               if (selectedCategory && p.category !== selectedCategory) return false;
