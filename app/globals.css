@@ -10,30 +10,48 @@
   --accent: #0ea5e9;
 }
 
-/* 하늘색/흰색 테마 (공간 페이지 전용) */
+/* 하늘색·흰색 테마 (공간 페이지 전용 — Novel_garden_map 레퍼런스와 동일 팔레트) */
 .space-app {
   --space-bg: #f0f7ff;
   --space-card: #ffffff;
-  --space-card-hover: #e0f2fe;
-  --space-border: #bae6fd;
-  --space-fg: #0f172a;
-  --space-fg-muted: #475569;
-  --space-fg-soft: #94a3b8;
-  --space-accent: #0284c7;
-  --space-accent-soft: rgba(14, 165, 233, 0.14);
+  --space-card-hover: #e8f2ff;
+  --space-border: #c7ddf5;
+  --space-fg: #1e3a5f;
+  --space-fg-muted: rgba(30, 58, 95, 0.6);
+  --space-fg-soft: rgba(30, 58, 95, 0.4);
+  --space-accent: #4aa8d8;
+  --space-accent-dim: #2d7aab;
+  --space-accent-soft: rgba(74, 168, 216, 0.18);
   background: var(--space-bg);
   color: var(--space-fg);
   min-height: 100vh;
 }
 
+.space-app ::-webkit-scrollbar {
+  width: 6px;
+}
+.space-app ::-webkit-scrollbar-track {
+  background: var(--space-bg);
+}
+.space-app ::-webkit-scrollbar-thumb {
+  background: var(--space-border);
+  border-radius: 3px;
+}
+
+.space-app .card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.space-app .card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(74, 168, 216, 0.18);
+}
+
 .space-app .pulse-glow {
-  animation: space-pulse 1.6s ease-in-out infinite;
-  box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.6);
+  animation: space-pulse 2s ease-in-out infinite;
 }
 @keyframes space-pulse {
-  0% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0.55); }
-  70% { box-shadow: 0 0 0 8px rgba(14, 165, 233, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(14, 165, 233, 0); }
+  0%, 100% { box-shadow: 0 0 5px currentColor; }
+  50% { box-shadow: 0 0 15px currentColor; }
 }
 
 html,

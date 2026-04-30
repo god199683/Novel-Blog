@@ -101,15 +101,25 @@ export default function SpacesListView() {
           아직 만든 공간이 없어요.
         </div>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {rows.map((s) => (
             <li
               key={s.id}
-              className="rounded-xl border border-sky-100 bg-white p-4 shadow-sm transition hover:border-brand hover:shadow-md"
+              className="card-hover rounded-xl border border-[#c7ddf5] bg-white p-5 shadow-sm"
+              style={{ transition: "transform 0.2s ease, box-shadow 0.2s ease" }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = "translateY(-2px)";
+                e.currentTarget.style.boxShadow =
+                  "0 8px 25px rgba(74, 168, 216, 0.18)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = "";
+                e.currentTarget.style.boxShadow = "";
+              }}
             >
               <Link to={`/spaces/${s.id}`} className="block">
-                <div className="text-3xl">{s.icon}</div>
-                <div className="mt-1 flex items-center gap-2 text-xs text-slate-500">
+                <div className="text-4xl">{s.icon}</div>
+                <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
                   {!s.published && (
                     <span className="rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700">
                       비공개
@@ -117,7 +127,10 @@ export default function SpacesListView() {
                   )}
                   <time>{s.updated_at.slice(0, 10)}</time>
                 </div>
-                <h2 className="mt-1 truncate font-semibold text-slate-800">
+                <h2
+                  className="mt-1 truncate text-lg font-bold"
+                  style={{ color: "#1e3a5f" }}
+                >
                   {s.title}
                 </h2>
                 {s.description && (
@@ -126,16 +139,18 @@ export default function SpacesListView() {
                   </p>
                 )}
               </Link>
-              <div className="mt-3 flex items-center gap-2 text-xs">
+              <div className="mt-4 flex items-center gap-2 text-xs">
                 <Link
                   to={`/u/${profile.username}/spaces/${s.slug}`}
-                  className="rounded-full border border-sky-200 px-2 py-1 text-slate-600 hover:border-brand hover:text-brand"
+                  className="rounded-full border px-2 py-1 text-slate-600 hover:text-[#4aa8d8]"
+                  style={{ borderColor: "#c7ddf5" }}
                 >
-                  공개 보기
+                  공개 보기 →
                 </Link>
                 <Link
                   to={`/spaces/${s.id}`}
-                  className="rounded-full border border-sky-200 px-2 py-1 text-slate-600 hover:border-brand hover:text-brand"
+                  className="rounded-full px-3 py-1 text-white"
+                  style={{ background: "#4aa8d8" }}
                 >
                   편집
                 </Link>
