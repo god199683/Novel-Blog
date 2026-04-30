@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { supabase, type Space, type SpaceSection } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
@@ -128,7 +128,7 @@ export default function SpaceEditView() {
     setActiveId(created.id);
   };
 
-  const saveActiveSection = useCallback(async () => {
+  const saveActiveSection = async () => {
     if (!active) return;
     setSavingSection(true);
     setError(null);
@@ -149,7 +149,7 @@ export default function SpaceEditView() {
     setSections((cur) =>
       cur.map((s) => (s.id === active.id ? { ...s, ...patch } : s))
     );
-  }, [active, secTitle, secIcon, secContent]);
+  };
 
   const deleteSection = async () => {
     if (!active) return;
