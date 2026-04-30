@@ -10,6 +10,32 @@
   --accent: #0ea5e9;
 }
 
+/* 다크 대시보드 스타일 (공간 페이지 전용) */
+.space-app {
+  --space-bg: #0b0f17;
+  --space-card: #131a26;
+  --space-card-hover: #1a2230;
+  --space-border: #1f2937;
+  --space-fg: #e2e8f0;
+  --space-fg-muted: rgba(226, 232, 240, 0.55);
+  --space-fg-soft: rgba(226, 232, 240, 0.35);
+  --space-accent: #34d399;
+  --space-accent-soft: rgba(52, 211, 153, 0.16);
+  background: var(--space-bg);
+  color: var(--space-fg);
+  min-height: 100vh;
+}
+
+.space-app .pulse-glow {
+  animation: space-pulse 1.6s ease-in-out infinite;
+  box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6);
+}
+@keyframes space-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.55); }
+  70% { box-shadow: 0 0 0 8px rgba(52, 211, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+
 html,
 body {
   color: var(--foreground);

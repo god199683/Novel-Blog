@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import {
+  HashRouter,
+  Routes,
+  Route,
+  Navigate,
+  Outlet,
+} from "react-router-dom";
 import { AuthProvider } from "@/lib/AuthContext";
 import AppShell from "@/components/views/AppShell";
 import HomeView from "@/components/views/HomeView";
@@ -17,9 +23,15 @@ import SpacesListView from "@/components/views/SpacesListView";
 import SpaceEditView from "@/components/views/SpaceEditView";
 import UserSpaceView from "@/components/views/UserSpaceView";
 
+function AppShellLayout() {
+  return (
+    <AppShell>
+      <Outlet />
+    </AppShell>
+  );
+}
+
 export default function Page() {
-  // HashRouter touches `document` on construction, which isn't available
-  // during static prerender. Defer the whole app to client-side mount.
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
 
@@ -34,8 +46,20 @@ export default function Page() {
   return (
     <AuthProvider>
       <HashRouter>
-        <AppShell>
-          <Routes>
+        <Routes>
+          {/* 풀스크린 — AppShell 헤더/푸터 미포함 */}
+          <Route path="/spaces/:id" element={<SpaceEditView />} />
+          <Route
+            path="/u/:username/spaces/:slug"
+            element={<UserSpaceView />}
+          />
+          <Route
+            path="/u/:username/spaces/:slug/:sectionSlug"
+            element={<UserSpaceView />}
+          />
+
+          {/* 일반 — AppShell 안에서 렌더 */}
+          <Route element={<AppShellLayout />}>
             <Route path="/" element={<HomeView />} />
             <Route path="/login" element={<LoginView />} />
             <Route path="/signup" element={<SignupView />} />
@@ -44,15 +68,6 @@ export default function Page() {
             <Route path="/edit/:id" element={<EditView />} />
             <Route path="/account" element={<AccountView />} />
             <Route path="/spaces" element={<SpacesListView />} />
-            <Route path="/spaces/:id" element={<SpaceEditView />} />
-            <Route
-              path="/u/:username/spaces/:slug"
-              element={<UserSpaceView />}
-            />
-            <Route
-              path="/u/:username/spaces/:slug/:sectionSlug"
-              element={<UserSpaceView />}
-            />
             <Route path="/u/:username" element={<UserBlogView mode="post" />} />
             <Route
               path="/u/:username/materials"
@@ -64,8 +79,8 @@ export default function Page() {
             />
             <Route path="/u/:username/:idOrSlug" element={<UserPostView />} />
             <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </AppShell>
+          </Route>
+        </Routes>
       </HashRouter>
     </AuthProvider>
   );
