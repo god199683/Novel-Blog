@@ -13,6 +13,9 @@ import EditView from "@/components/views/EditView";
 import UserBlogView from "@/components/views/UserBlogView";
 import UserPostView from "@/components/views/UserPostView";
 import AccountView from "@/components/views/AccountView";
+import SpacesListView from "@/components/views/SpacesListView";
+import SpaceEditView from "@/components/views/SpaceEditView";
+import UserSpaceView from "@/components/views/UserSpaceView";
 
 export default function Page() {
   // HashRouter touches `document` on construction, which isn't available
@@ -40,6 +43,16 @@ export default function Page() {
             <Route path="/write" element={<WriteView />} />
             <Route path="/edit/:id" element={<EditView />} />
             <Route path="/account" element={<AccountView />} />
+            <Route path="/spaces" element={<SpacesListView />} />
+            <Route path="/spaces/:id" element={<SpaceEditView />} />
+            <Route
+              path="/u/:username/spaces/:slug"
+              element={<UserSpaceView />}
+            />
+            <Route
+              path="/u/:username/spaces/:slug/:sectionSlug"
+              element={<UserSpaceView />}
+            />
             <Route path="/u/:username" element={<UserBlogView mode="post" />} />
             <Route
               path="/u/:username/materials"

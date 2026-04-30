@@ -86,3 +86,27 @@ export type UserFont = {
   created_at: string;
 };
 
+export type Space = {
+  id: string;
+  author_id: string;
+  slug: string;
+  title: string;
+  description: string | null;
+  icon: string;
+  published: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SpaceSection = {
+  id: string;
+  space_id: string;
+  slug: string;
+  title: string;
+  icon: string;
+  content: string;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
