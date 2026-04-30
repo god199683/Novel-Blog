@@ -369,7 +369,7 @@ export default function SpaceEditView() {
             </div>
           ) : (
             <div
-              className="rounded-2xl border p-6"
+              className="rounded-2xl border p-6 shadow-sm"
               style={{
                 background: "var(--space-card)",
                 borderColor: "var(--space-border)",
@@ -421,27 +421,20 @@ export default function SpaceEditView() {
                   type="button"
                   onClick={saveActiveSection}
                   disabled={savingSection}
-                  className="rounded-full px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-50"
-                  style={{
-                    background: "var(--space-accent)",
-                    color: "#0b1118",
-                  }}
+                  className="rounded-full px-4 py-1.5 text-sm font-medium text-white transition-colors disabled:opacity-50"
+                  style={{ background: "var(--space-accent)" }}
                 >
                   {savingSection ? "저장 중..." : "섹션 저장"}
                 </button>
                 <button
                   type="button"
                   onClick={deleteSection}
-                  className="rounded px-3 py-1.5 text-sm transition-colors hover:bg-red-500/10"
-                  style={{ color: "rgba(248,113,113,0.85)" }}
+                  className="rounded px-3 py-1.5 text-sm text-red-600 transition-colors hover:bg-red-50"
                 >
                   삭제
                 </button>
               </div>
-              {/* Tiptap 에디터는 라이트 모드라, 흰 카드로 감싸 가독성 유지 */}
-              <div className="rounded-lg bg-white p-4 text-slate-900">
-                <Editor initialContent={secContent} onChange={setSecContent} />
-              </div>
+              <Editor initialContent={secContent} onChange={setSecContent} />
             </div>
           )}
         </div>

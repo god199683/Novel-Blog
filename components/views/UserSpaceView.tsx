@@ -258,7 +258,7 @@ export default function UserSpaceView() {
             </p>
           ) : (
             <article
-              className="rounded-2xl border p-8"
+              className="rounded-2xl border p-8 shadow-sm"
               style={{
                 background: "var(--space-card)",
                 borderColor: "var(--space-border)",
@@ -277,12 +277,10 @@ export default function UserSpaceView() {
                 </h2>
               </header>
               {active.content ? (
-                <div className="rounded-lg bg-white p-6 text-slate-900">
-                  <div
-                    className="article-body"
-                    dangerouslySetInnerHTML={{ __html: active.content }}
-                  />
-                </div>
+                <div
+                  className="article-body"
+                  dangerouslySetInnerHTML={{ __html: active.content }}
+                />
               ) : (
                 <p
                   className="py-10 text-center"
