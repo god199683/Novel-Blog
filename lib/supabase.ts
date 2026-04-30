@@ -98,15 +98,75 @@ export type Space = {
   updated_at: string;
 };
 
-export type SpaceSection = {
+export type Grade = "F" | "E" | "D" | "C" | "B" | "A" | "S" | "SS" | "SSS" | "Ex";
+export type GrowthStage = "seed" | "sprout" | "growing" | "mature" | "ex";
+export type GrowthMode = "off" | "stage1" | "stage2";
+export type CreatureType = "plant" | "animal" | "spirit" | "other";
+export type AccessRole = "owner" | "partner" | "family" | "pet" | "guest";
+
+export type Zone = {
   id: string;
   space_id: string;
-  slug: string;
-  title: string;
+  name: string;
+  description: string | null;
+  ecosystem_type: string;
+  climate: string | null;
+  auto_feed: boolean;
+  auto_environment: boolean;
+  creature_count: number;
+  plant_count: number;
+  color: string;
   icon: string;
-  content: string;
-  sort_order: number;
   created_at: string;
+  updated_at: string;
+};
+
+export type Creature = {
+  id: string;
+  space_id: string;
+  name: string;
+  type: CreatureType;
+  grade: Grade;
+  zone_id: string | null;
+  growth_stage: GrowthStage;
+  growth_mode: GrowthMode;
+  description: string | null;
+  image_url: string | null;
+  auto_classified: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type Byproduct = {
+  id: string;
+  space_id: string;
+  name: string;
+  source_creature_id: string | null;
+  source_zone_id: string | null;
+  grade: Grade;
+  quantity: number;
+  category: string;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AccessKey = {
+  id: string;
+  space_id: string;
+  holder_name: string;
+  role: AccessRole;
+  is_active: boolean;
+  granted_at: string;
+  expires_at: string | null;
+};
+
+export type GardenSetting = {
+  id: string;
+  space_id: string;
+  key: string;
+  value: string;
+  description: string | null;
   updated_at: string;
 };
 

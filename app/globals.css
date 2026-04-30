@@ -54,6 +54,47 @@
   50% { box-shadow: 0 0 15px currentColor; }
 }
 
+/* 등급 뱃지 */
+.space-app .grade-F { background: #94a3b8; }
+.space-app .grade-E { background: #78909c; }
+.space-app .grade-D { background: #8da4bf; }
+.space-app .grade-C { background: #4caf84; }
+.space-app .grade-B { background: #5b9bd5; }
+.space-app .grade-A { background: #8b7ec8; }
+.space-app .grade-S { background: #e8a63a; }
+.space-app .grade-SS { background: #e08850; }
+.space-app .grade-SSS { background: #e55b5b; }
+.space-app .grade-Ex { background: linear-gradient(135deg, #e8a63a, #e55b5b, #8b7ec8); }
+
+/* 토글 스위치 */
+.space-app .toggle-switch {
+  position: relative;
+  width: 48px;
+  height: 24px;
+  background: #b8cfe0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+.space-app .toggle-switch.active {
+  background: var(--space-accent);
+}
+.space-app .toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+.space-app .toggle-switch.active::after {
+  transform: translateX(24px);
+}
+
 html,
 body {
   color: var(--foreground);

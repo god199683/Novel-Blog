@@ -20,8 +20,14 @@ import UserBlogView from "@/components/views/UserBlogView";
 import UserPostView from "@/components/views/UserPostView";
 import AccountView from "@/components/views/AccountView";
 import SpacesListView from "@/components/views/SpacesListView";
-import SpaceEditView from "@/components/views/SpaceEditView";
-import UserSpaceView from "@/components/views/UserSpaceView";
+import SpaceLayout from "@/components/views/space/SpaceLayout";
+import SpaceDashboard from "@/components/views/space/Dashboard";
+import SpaceMap from "@/components/views/space/Map";
+import SpaceZones from "@/components/views/space/Zones";
+import SpaceCreatures from "@/components/views/space/Creatures";
+import SpaceByproducts from "@/components/views/space/Byproducts";
+import SpaceSettings from "@/components/views/space/Settings";
+import SpaceAccess from "@/components/views/space/Access";
 
 function AppShellLayout() {
   return (
@@ -47,18 +53,32 @@ export default function Page() {
     <AuthProvider>
       <HashRouter>
         <Routes>
-          {/* 풀스크린 — AppShell 헤더/푸터 미포함 */}
-          <Route path="/spaces/:id" element={<SpaceEditView />} />
+          {/* 풀스크린 공간 페이지 — 소유자 */}
+          <Route path="/spaces/:id" element={<SpaceLayout mode="owner" />}>
+            <Route index element={<SpaceDashboard />} />
+            <Route path="map" element={<SpaceMap />} />
+            <Route path="zones" element={<SpaceZones />} />
+            <Route path="creatures" element={<SpaceCreatures />} />
+            <Route path="byproducts" element={<SpaceByproducts />} />
+            <Route path="settings" element={<SpaceSettings />} />
+            <Route path="access" element={<SpaceAccess />} />
+          </Route>
+
+          {/* 풀스크린 공간 페이지 — 공개 */}
           <Route
             path="/u/:username/spaces/:slug"
-            element={<UserSpaceView />}
-          />
-          <Route
-            path="/u/:username/spaces/:slug/:sectionSlug"
-            element={<UserSpaceView />}
-          />
+            element={<SpaceLayout mode="public" />}
+          >
+            <Route index element={<SpaceDashboard />} />
+            <Route path="map" element={<SpaceMap />} />
+            <Route path="zones" element={<SpaceZones />} />
+            <Route path="creatures" element={<SpaceCreatures />} />
+            <Route path="byproducts" element={<SpaceByproducts />} />
+            <Route path="settings" element={<SpaceSettings />} />
+            <Route path="access" element={<SpaceAccess />} />
+          </Route>
 
-          {/* 일반 — AppShell 안에서 렌더 */}
+          {/* 일반 라우트 — AppShell 안 */}
           <Route element={<AppShellLayout />}>
             <Route path="/" element={<HomeView />} />
             <Route path="/login" element={<LoginView />} />
