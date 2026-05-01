@@ -189,6 +189,31 @@ export default function SpacesListView() {
                 >
                   편집
                 </Link>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (
+                      !confirm(
+                        `'${s.title}' 공간을 삭제할까요?\n구역·동식물·부산물·설정·출입 데이터가 모두 함께 사라집니다. 되돌릴 수 없어요.`
+                      )
+                    )
+                      return;
+                    const { error } = await supabase()
+                      .from("spaces")
+                      .delete()
+                      .eq("id", s.id);
+                    if (error) {
+                      alert(error.message);
+                      return;
+                    }
+                    setRows((cur) => cur.filter((x) => x.id !== s.id));
+                  }}
+                  className="ml-auto rounded-full border px-2 py-1 text-red-600 hover:bg-red-50"
+                  style={{ borderColor: "#fecaca" }}
+                  title="이 공간 삭제"
+                >
+                  삭제
+                </button>
               </div>
             </li>
           ))}
