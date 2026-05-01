@@ -18,6 +18,7 @@ type Props = {
   base: string; // "/spaces/<id>" or "/u/<user>/spaces/<slug>"
   profile?: Profile | null;
   isOwner: boolean;
+  onTogglePublish?: () => void;
   children: React.ReactNode;
 };
 
@@ -26,6 +27,7 @@ export default function SpaceShell({
   base,
   profile,
   isOwner,
+  onTogglePublish,
   children,
 }: Props) {
   const location = useLocation();
@@ -117,9 +119,29 @@ export default function SpaceShell({
               className="pulse-glow w-2 h-2 rounded-full"
               style={{ background: "var(--space-accent)" }}
             />
-            시스템 활성 중
+            {space.published ? "공개 중" : "비공개"}
           </div>
-          {isOwner && profile && (
+          {isOwner && onTogglePublish && (
+            <button
+              type="button"
+              onClick={onTogglePublish}
+              className="flex w-full items-center justify-between rounded px-2 py-1 text-xs transition-colors hover:bg-[var(--space-card-hover)]"
+              style={{ color: "var(--space-fg-muted)" }}
+            >
+              <span>{space.published ? "🌐 공개" : "🔒 비공개"}</span>
+              <span
+                className="text-[10px] uppercase tracking-wider"
+                style={{
+                  color: space.published
+                    ? "var(--space-accent)"
+                    : "var(--space-fg-soft)",
+                }}
+              >
+                {space.published ? "ON" : "OFF"}
+              </span>
+            </button>
+          )}
+          {isOwner && profile && space.published && (
             <a
               href={`#/u/${profile.username}/spaces/${space.slug}`}
               className="block text-xs hover:opacity-80"

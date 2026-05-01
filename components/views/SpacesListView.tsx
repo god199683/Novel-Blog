@@ -140,13 +140,48 @@ export default function SpacesListView() {
                 )}
               </Link>
               <div className="mt-4 flex items-center gap-2 text-xs">
-                <Link
-                  to={`/u/${profile.username}/spaces/${s.slug}`}
-                  className="rounded-full border px-2 py-1 text-slate-600 hover:text-[#4aa8d8]"
-                  style={{ borderColor: "#c7ddf5" }}
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const next = !s.published;
+                    if (
+                      s.published &&
+                      !confirm(
+                        `'${s.title}'을(를) 비공개로 전환할까요?`
+                      )
+                    )
+                      return;
+                    const { error } = await supabase()
+                      .from("spaces")
+                      .update({ published: next })
+                      .eq("id", s.id);
+                    if (error) {
+                      alert(error.message);
+                      return;
+                    }
+                    setRows((cur) =>
+                      cur.map((x) =>
+                        x.id === s.id ? { ...x, published: next } : x
+                      )
+                    );
+                  }}
+                  className="rounded-full border px-2 py-1"
+                  style={{
+                    borderColor: "#c7ddf5",
+                    color: s.published ? "#16a34a" : "#d97706",
+                  }}
                 >
-                  공개 보기 →
-                </Link>
+                  {s.published ? "🌐 공개" : "🔒 비공개"}
+                </button>
+                {s.published && (
+                  <Link
+                    to={`/u/${profile.username}/spaces/${s.slug}`}
+                    className="rounded-full border px-2 py-1 text-slate-600 hover:text-[#4aa8d8]"
+                    style={{ borderColor: "#c7ddf5" }}
+                  >
+                    공개 보기 →
+                  </Link>
+                )}
                 <Link
                   to={`/spaces/${s.id}`}
                   className="rounded-full px-3 py-1 text-white"

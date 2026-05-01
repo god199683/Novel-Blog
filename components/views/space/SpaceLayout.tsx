@@ -141,6 +141,28 @@ export default function SpaceLayout({ mode }: { mode: Mode }) {
       ? `/spaces/${space.id}`
       : `/u/${profile!.username}/spaces/${space.slug}`;
 
+  const togglePublish = async () => {
+    if (!isOwner || !space) return;
+    const next = !space.published;
+    if (
+      space.published &&
+      !confirm(
+        `'${space.title}'을(를) 비공개로 전환할까요? 다른 사람은 더 이상 볼 수 없게 됩니다.`
+      )
+    ) {
+      return;
+    }
+    const { error } = await supabase()
+      .from("spaces")
+      .update({ published: next })
+      .eq("id", space.id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    setSpace({ ...space, published: next });
+  };
+
   return (
     <SpaceProvider space={space} isOwner={isOwner}>
       <SpaceShell
@@ -148,6 +170,7 @@ export default function SpaceLayout({ mode }: { mode: Mode }) {
         base={base}
         profile={profile}
         isOwner={isOwner}
+        onTogglePublish={togglePublish}
       >
         <Outlet />
       </SpaceShell>
