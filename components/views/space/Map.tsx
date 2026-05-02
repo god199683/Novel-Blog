@@ -1,129 +1,117 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { supabase, type Zone } from "@/lib/supabase";
+import { supabase } from "@/lib/supabase";
 import { useSpace } from "@/components/space/SpaceContext";
 
-type Pos = { x: number; y: number; w: number; h: number };
+// ─────────────────────────────────────────────────────────────
+//  벡터 맵 에디터 — 영역(폴리곤), 강·길(폴리라인), 마커
+// ─────────────────────────────────────────────────────────────
+
+type Vec = { x: number; y: number }; // 0~100 비율 좌표
+
+type Polygon = {
+  id: string;
+  kind: "polygon";
+  points: Vec[];
+  color: string;
+  label?: string;
+};
+
+type Line = {
+  id: string;
+  kind: "line";
+  points: Vec[];
+  color: string;
+  thickness: number;
+  label?: string;
+};
+
 type Marker = {
   id: string;
-  emoji: string;
-  label: string;
+  kind: "marker";
   x: number;
   y: number;
-  size: number; // 1~3
+  emoji: string;
+  label?: string;
 };
 
-type DragMode =
-  | "move"
-  | "resize-tl"
-  | "resize-tr"
-  | "resize-bl"
-  | "resize-br"
-  | "resize-t"
-  | "resize-b"
-  | "resize-l"
-  | "resize-r";
+type Shape = Polygon | Line | Marker;
 
-const DEFAULTS: Record<string, Pos> = {
-  "세계수 주변": { x: 35, y: 28, w: 26, h: 26 },
-  "호수 구역": { x: 28, y: 50, w: 28, h: 22 },
-  "저택 정원": { x: 50, y: 5, w: 26, h: 22 },
-  "약초 밭": { x: 5, y: 15, w: 18, h: 20 },
-  "영수 서식지": { x: 60, y: 60, w: 20, h: 20 },
+type Tool = "select" | "area" | "river" | "marker" | "delete";
+
+type MapData = {
+  polygons: Polygon[];
+  lines: Line[];
+  markers: Marker[];
 };
 
-const DEFAULT_MARKERS: Marker[] = [
-  { id: "m1", emoji: "🌸", label: "벚꽃", x: 75, y: 8, size: 2 },
-  { id: "m2", emoji: "🍄", label: "버섯", x: 85, y: 20, size: 2 },
-  { id: "m3", emoji: "🦋", label: "나비", x: 88, y: 80, size: 2 },
-  { id: "m4", emoji: "🌿", label: "풀", x: 5, y: 45, size: 2 },
-  { id: "m5", emoji: "✨", label: "빛", x: 75, y: 30, size: 1 },
+const DEFAULT_DATA: MapData = { polygons: [], lines: [], markers: [] };
+
+const AREA_COLORS = [
+  "#7cba3d", "#3e8a3e", "#9aa0a6", "#e8d086",
+  "#e8b4d8", "#c89968", "#a78bfa", "#f59e0b",
 ];
-
+const RIVER_COLORS = ["#3490b3", "#1f5e7a", "#74c0e5", "#5a4434", "#9aa0a6"];
 const MARKER_EMOJIS = [
-  "🌸", "🍄", "🦋", "🌿", "✨", "🌺", "🍀", "🐦", "🌻", "💎", "🔮", "🕯️",
-  "🪴", "🌾", "🍃", "🐝", "🐛", "🦌", "🐿️", "🦉", "⭐", "🌙", "🔥", "❄️",
-  "💫", "🪨", "🏵️", "⛲", "🗿", "🪦",
+  "🌳", "🌲", "🌴", "🌵", "🌸", "🌺", "🌻", "🍄",
+  "🌿", "🪴", "🪨", "⛲", "🗿", "🏛️", "🏠", "🏰",
+  "⛩️", "🕯️", "🐦", "🦌", "🦊", "🐰", "🦋",
+  "✨", "⭐", "🌙", "☀️", "🔥", "❄️", "💧",
 ];
 
-const MIN_SIZE = 8;
+const newId = () =>
+  `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 export default function SpaceMapView() {
   const { space, isOwner } = useSpace();
-  const [zones, setZones] = useState<Zone[]>([]);
-  const [positions, setPositions] = useState<Record<string, Pos>>({});
-  const [markers, setMarkers] = useState<Marker[]>(DEFAULT_MARKERS);
+  const [data, setData] = useState<MapData>(DEFAULT_DATA);
   const [loading, setLoading] = useState(true);
 
   const [editMode, setEditMode] = useState(false);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [tool, setTool] = useState<"select" | "marker">("select");
-  const [pendingEmoji, setPendingEmoji] = useState("🌸");
+  const [tool, setTool] = useState<Tool>("select");
+  const [areaColor, setAreaColor] = useState(AREA_COLORS[0]);
+  const [riverColor, setRiverColor] = useState(RIVER_COLORS[0]);
+  const [riverThickness, setRiverThickness] = useState(0.8);
+  const [pendingEmoji, setPendingEmoji] = useState("🌳");
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  // 드래그 상태
-  const [draggingZone, setDraggingZone] = useState<string | null>(null);
-  const [dragMode, setDragMode] = useState<DragMode>("move");
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [dragStartPos, setDragStartPos] = useState<Pos>({
-    x: 0,
-    y: 0,
-    w: 0,
-    h: 0,
-  });
-  const [draggingMarker, setDraggingMarker] = useState<string | null>(null);
-  const mapRef = useRef<HTMLDivElement>(null);
+  // 그리는 중인 임시 도형
+  const [drawingPoints, setDrawingPoints] = useState<Vec[]>([]);
+  const [hoverPoint, setHoverPoint] = useState<Vec | null>(null);
+
+  // 드래그 중인 도형 정보
+  const dragRef = useRef<{
+    id: string;
+    type: "shape" | "vertex";
+    vertexIndex?: number;
+    startMouse: Vec;
+    startSnapshot: Shape;
+  } | null>(null);
+
+  const svgRef = useRef<SVGSVGElement | null>(null);
 
   useEffect(() => {
     let active = true;
     (async () => {
       const sb = supabase();
-      const [zonesRes, posRes, markersRes] = await Promise.all([
-        sb.from("zones").select("*").eq("space_id", space.id).order("created_at"),
-        sb
-          .from("garden_settings")
-          .select("*")
-          .eq("space_id", space.id)
-          .eq("key", "zone_positions")
-          .maybeSingle(),
-        sb
-          .from("garden_settings")
-          .select("*")
-          .eq("space_id", space.id)
-          .eq("key", "map_markers")
-          .maybeSingle(),
-      ]);
+      const { data: row } = await sb
+        .from("garden_settings")
+        .select("*")
+        .eq("space_id", space.id)
+        .eq("key", "map_data")
+        .maybeSingle();
       if (!active) return;
-      const zs = (zonesRes.data ?? []) as Zone[];
-      setZones(zs);
-
-      let stored: Record<string, Pos> = {};
-      if (posRes.data?.value) {
+      if (row?.value) {
         try {
-          stored = JSON.parse(posRes.data.value);
+          const parsed = JSON.parse(row.value);
+          setData({
+            polygons: Array.isArray(parsed.polygons) ? parsed.polygons : [],
+            lines: Array.isArray(parsed.lines) ? parsed.lines : [],
+            markers: Array.isArray(parsed.markers) ? parsed.markers : [],
+          });
         } catch {}
       }
-      const merged: Record<string, Pos> = {};
-      zs.forEach((z, i) => {
-        merged[z.name] =
-          stored[z.name] ??
-          DEFAULTS[z.name] ?? {
-            x: 5 + (i % 4) * 22,
-            y: 80,
-            w: 16,
-            h: 14,
-          };
-      });
-      setPositions(merged);
-
-      if (markersRes.data?.value) {
-        try {
-          setMarkers(JSON.parse(markersRes.data.value));
-        } catch {
-          setMarkers([...DEFAULT_MARKERS]);
-        }
-      }
-
       setLoading(false);
     })();
     return () => {
@@ -131,16 +119,16 @@ export default function SpaceMapView() {
     };
   }, [space.id]);
 
-  const persistPositions = useCallback(
-    async (next: Record<string, Pos>) => {
+  const persist = useCallback(
+    async (next: MapData) => {
       await supabase()
         .from("garden_settings")
         .upsert(
           {
             space_id: space.id,
-            key: "zone_positions",
+            key: "map_data",
             value: JSON.stringify(next),
-            description: "맵 구역 위치",
+            description: "벡터 맵 데이터",
           },
           { onConflict: "space_id,key" }
         );
@@ -148,217 +136,324 @@ export default function SpaceMapView() {
     [space.id]
   );
 
-  const persistMarkers = useCallback(
-    async (next: Marker[]) => {
-      await supabase()
-        .from("garden_settings")
-        .upsert(
-          {
-            space_id: space.id,
-            key: "map_markers",
-            value: JSON.stringify(next),
-            description: "맵 장식 마커",
-          },
-          { onConflict: "space_id,key" }
-        );
-    },
-    [space.id]
-  );
+  const saveData = (next: MapData) => {
+    setData(next);
+    persist(next);
+  };
 
-  const pctFromEvent = (e: React.MouseEvent) => {
-    const rect = mapRef.current!.getBoundingClientRect();
+  // ───── 좌표 변환 ─────
+  const ptFromEvent = (e: React.MouseEvent | React.PointerEvent): Vec | null => {
+    const svg = svgRef.current;
+    if (!svg) return null;
+    const rect = svg.getBoundingClientRect();
     return {
       x: ((e.clientX - rect.left) / rect.width) * 100,
       y: ((e.clientY - rect.top) / rect.height) * 100,
     };
   };
 
-  const onZoneMouseDown = (
-    e: React.MouseEvent,
-    zoneName: string,
-    mode: DragMode
-  ) => {
-    if (!editMode || !isOwner || !mapRef.current) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const pt = pctFromEvent(e);
-    setDragStart(pt);
-    setDragStartPos({
-      ...(positions[zoneName] ?? DEFAULTS[zoneName] ?? { x: 0, y: 0, w: 16, h: 14 }),
-    });
-    setDraggingZone(zoneName);
-    setDragMode(mode);
-    setSelected(`zone:${zoneName}`);
-  };
-
-  const onMarkerMouseDown = (e: React.MouseEvent, markerId: string) => {
-    if (!editMode || !isOwner || !mapRef.current) return;
-    e.preventDefault();
-    e.stopPropagation();
-    setDraggingMarker(markerId);
-    setSelected(`marker:${markerId}`);
-  };
-
-  const onMapMouseDown = (e: React.MouseEvent) => {
-    if (!editMode || !isOwner || !mapRef.current) return;
-    if (e.target !== e.currentTarget) return;
-    if (tool === "marker") {
-      const pt = pctFromEvent(e);
-      const m: Marker = {
-        id: `m${Date.now()}`,
-        emoji: pendingEmoji,
-        label: pendingEmoji,
-        x: pt.x,
-        y: pt.y,
-        size: 2,
-      };
-      const next = [...markers, m];
-      setMarkers(next);
-      persistMarkers(next);
-      setSelected(`marker:${m.id}`);
-      setTool("select");
-    } else {
-      setSelected(null);
+  // ───── 그리기 모드 ─────
+  const onCanvasMouseDown = (e: React.MouseEvent) => {
+    if (!editMode || !isOwner) {
+      // 비편집: 선택만
+      if (e.target === e.currentTarget) setSelectedId(null);
+      return;
     }
-  };
+    const pt = ptFromEvent(e);
+    if (!pt) return;
 
-  const onMouseMove = (e: React.MouseEvent) => {
-    if (!mapRef.current) return;
-
-    if (draggingMarker) {
-      const pt = pctFromEvent(e);
-      setMarkers((prev) =>
-        prev.map((m) =>
-          m.id === draggingMarker
-            ? {
-                ...m,
-                x: Math.max(0, Math.min(100, pt.x)),
-                y: Math.max(0, Math.min(100, pt.y)),
-              }
-            : m
-        )
-      );
+    if (tool === "area" || tool === "river") {
+      // 정점 추가
+      // 완료 조건: 폴리곤은 첫 점 근처 클릭 시 닫음
+      if (tool === "area" && drawingPoints.length >= 3) {
+        const first = drawingPoints[0];
+        const dx = pt.x - first.x;
+        const dy = pt.y - first.y;
+        if (Math.hypot(dx, dy) < 2) {
+          finishDrawing();
+          return;
+        }
+      }
+      setDrawingPoints((prev) => [...prev, pt]);
       return;
     }
 
-    if (!draggingZone) return;
-    const pt = pctFromEvent(e);
-    const dx = pt.x - dragStart.x;
-    const dy = pt.y - dragStart.y;
-    const sp = dragStartPos;
+    if (tool === "marker") {
+      const m: Marker = {
+        id: newId(),
+        kind: "marker",
+        x: pt.x,
+        y: pt.y,
+        emoji: pendingEmoji,
+      };
+      saveData({ ...data, markers: [...data.markers, m] });
+      setSelectedId(m.id);
+      return;
+    }
 
-    setPositions((prev) => {
-      let { x, y, w, h } = sp;
-      switch (dragMode) {
-        case "move":
-          x = Math.max(0, Math.min(100 - w, sp.x + dx));
-          y = Math.max(0, Math.min(100 - h, sp.y + dy));
-          break;
-        case "resize-r":
-          w = Math.max(MIN_SIZE, Math.min(100 - x, sp.w + dx));
-          break;
-        case "resize-l": {
-          const nx = Math.max(0, sp.x + dx);
-          w = Math.max(MIN_SIZE, sp.w - (nx - sp.x));
-          if (w > MIN_SIZE) x = nx;
-          break;
+    if (tool === "select") {
+      // 빈 공간 클릭 → 선택 해제
+      if (e.target === e.currentTarget) setSelectedId(null);
+      return;
+    }
+  };
+
+  const onCanvasMouseMove = (e: React.MouseEvent) => {
+    const pt = ptFromEvent(e);
+    if (!pt) return;
+
+    if (editMode && (tool === "area" || tool === "river")) {
+      setHoverPoint(pt);
+    }
+
+    if (dragRef.current && editMode) {
+      const d = dragRef.current;
+      const dx = pt.x - d.startMouse.x;
+      const dy = pt.y - d.startMouse.y;
+
+      if (d.type === "shape") {
+        const snap = d.startSnapshot;
+        if (snap.kind === "marker") {
+          setData((prev) => ({
+            ...prev,
+            markers: prev.markers.map((m) =>
+              m.id === d.id
+                ? {
+                    ...m,
+                    x: Math.max(0, Math.min(100, snap.x + dx)),
+                    y: Math.max(0, Math.min(100, snap.y + dy)),
+                  }
+                : m
+            ),
+          }));
+        } else if (snap.kind === "polygon") {
+          const newPoints = snap.points.map((p) => ({
+            x: Math.max(0, Math.min(100, p.x + dx)),
+            y: Math.max(0, Math.min(100, p.y + dy)),
+          }));
+          setData((prev) => ({
+            ...prev,
+            polygons: prev.polygons.map((s) =>
+              s.id === d.id ? { ...s, points: newPoints } : s
+            ),
+          }));
+        } else if (snap.kind === "line") {
+          const newPoints = snap.points.map((p) => ({
+            x: Math.max(0, Math.min(100, p.x + dx)),
+            y: Math.max(0, Math.min(100, p.y + dy)),
+          }));
+          setData((prev) => ({
+            ...prev,
+            lines: prev.lines.map((s) =>
+              s.id === d.id ? { ...s, points: newPoints } : s
+            ),
+          }));
         }
-        case "resize-b":
-          h = Math.max(MIN_SIZE, Math.min(100 - y, sp.h + dy));
-          break;
-        case "resize-t": {
-          const ny = Math.max(0, sp.y + dy);
-          h = Math.max(MIN_SIZE, sp.h - (ny - sp.y));
-          if (h > MIN_SIZE) y = ny;
-          break;
-        }
-        case "resize-br":
-          w = Math.max(MIN_SIZE, Math.min(100 - x, sp.w + dx));
-          h = Math.max(MIN_SIZE, Math.min(100 - y, sp.h + dy));
-          break;
-        case "resize-bl": {
-          const nx = Math.max(0, sp.x + dx);
-          w = Math.max(MIN_SIZE, sp.w - (nx - sp.x));
-          if (w > MIN_SIZE) x = nx;
-          h = Math.max(MIN_SIZE, Math.min(100 - y, sp.h + dy));
-          break;
-        }
-        case "resize-tr": {
-          const ny = Math.max(0, sp.y + dy);
-          h = Math.max(MIN_SIZE, sp.h - (ny - sp.y));
-          if (h > MIN_SIZE) y = ny;
-          w = Math.max(MIN_SIZE, Math.min(100 - x, sp.w + dx));
-          break;
-        }
-        case "resize-tl": {
-          const nx = Math.max(0, sp.x + dx);
-          const ny = Math.max(0, sp.y + dy);
-          w = Math.max(MIN_SIZE, sp.w - (nx - sp.x));
-          h = Math.max(MIN_SIZE, sp.h - (ny - sp.y));
-          if (w > MIN_SIZE) x = nx;
-          if (h > MIN_SIZE) y = ny;
-          break;
+      } else if (d.type === "vertex" && typeof d.vertexIndex === "number") {
+        // 꼭짓점 드래그
+        const snap = d.startSnapshot;
+        if (snap.kind === "polygon" || snap.kind === "line") {
+          const idx = d.vertexIndex;
+          const newPoints = snap.points.map((p, i) =>
+            i === idx
+              ? {
+                  x: Math.max(0, Math.min(100, pt.x)),
+                  y: Math.max(0, Math.min(100, pt.y)),
+                }
+              : p
+          );
+          setData((prev) => {
+            if (snap.kind === "polygon") {
+              return {
+                ...prev,
+                polygons: prev.polygons.map((s) =>
+                  s.id === d.id ? { ...s, points: newPoints } : s
+                ),
+              };
+            }
+            return {
+              ...prev,
+              lines: prev.lines.map((s) =>
+                s.id === d.id ? { ...s, points: newPoints } : s
+              ),
+            };
+          });
         }
       }
-      return { ...prev, [draggingZone]: { x, y, w, h } };
+    }
+  };
+
+  const onCanvasMouseUp = () => {
+    if (dragRef.current) {
+      dragRef.current = null;
+      persist(data);
+    }
+  };
+
+  // 더블클릭으로 line 도형 완료
+  const onCanvasDoubleClick = () => {
+    if (!editMode || tool !== "river") return;
+    if (drawingPoints.length >= 2) finishDrawing();
+  };
+
+  const finishDrawing = () => {
+    if (drawingPoints.length === 0) return;
+    if (tool === "area") {
+      if (drawingPoints.length < 3) {
+        setDrawingPoints([]);
+        return;
+      }
+      const poly: Polygon = {
+        id: newId(),
+        kind: "polygon",
+        points: drawingPoints,
+        color: areaColor,
+      };
+      const next = { ...data, polygons: [...data.polygons, poly] };
+      saveData(next);
+      setSelectedId(poly.id);
+    } else if (tool === "river") {
+      if (drawingPoints.length < 2) {
+        setDrawingPoints([]);
+        return;
+      }
+      const ln: Line = {
+        id: newId(),
+        kind: "line",
+        points: drawingPoints,
+        color: riverColor,
+        thickness: riverThickness,
+      };
+      const next = { ...data, lines: [...data.lines, ln] };
+      saveData(next);
+      setSelectedId(ln.id);
+    }
+    setDrawingPoints([]);
+    setTool("select");
+  };
+
+  const cancelDrawing = () => {
+    setDrawingPoints([]);
+    setHoverPoint(null);
+  };
+
+  // ESC로 그리기 취소
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        cancelDrawing();
+      } else if (
+        e.key === "Enter" &&
+        editMode &&
+        (tool === "area" || tool === "river")
+      ) {
+        e.preventDefault();
+        finishDrawing();
+      } else if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        selectedId &&
+        editMode
+      ) {
+        const t = e.target as HTMLElement;
+        if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
+        deleteShape(selectedId);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editMode, tool, drawingPoints, selectedId, data]);
+
+  // ───── 도형 핸들러 ─────
+  const onShapeMouseDown = (
+    e: React.MouseEvent,
+    shape: Shape
+  ) => {
+    if (!editMode || !isOwner) {
+      setSelectedId(shape.id);
+      e.stopPropagation();
+      return;
+    }
+    e.stopPropagation();
+    setSelectedId(shape.id);
+
+    if (tool === "delete") {
+      deleteShape(shape.id);
+      return;
+    }
+    if (tool !== "select") return;
+
+    const pt = ptFromEvent(e);
+    if (!pt) return;
+    dragRef.current = {
+      id: shape.id,
+      type: "shape",
+      startMouse: pt,
+      startSnapshot: structuredClone(shape),
+    };
+  };
+
+  const onVertexMouseDown = (
+    e: React.MouseEvent,
+    shape: Shape,
+    idx: number
+  ) => {
+    if (!editMode || !isOwner) return;
+    if (tool !== "select") return;
+    e.stopPropagation();
+    const pt = ptFromEvent(e);
+    if (!pt) return;
+    dragRef.current = {
+      id: shape.id,
+      type: "vertex",
+      vertexIndex: idx,
+      startMouse: pt,
+      startSnapshot: structuredClone(shape),
+    };
+  };
+
+  const deleteShape = (id: string) => {
+    saveData({
+      polygons: data.polygons.filter((s) => s.id !== id),
+      lines: data.lines.filter((s) => s.id !== id),
+      markers: data.markers.filter((s) => s.id !== id),
+    });
+    setSelectedId(null);
+  };
+
+  const updateShape = (id: string, patch: Partial<Shape>) => {
+    setData((prev) => {
+      const next: MapData = {
+        polygons: prev.polygons.map((s) =>
+          s.id === id ? ({ ...s, ...patch } as Polygon) : s
+        ),
+        lines: prev.lines.map((s) =>
+          s.id === id ? ({ ...s, ...patch } as Line) : s
+        ),
+        markers: prev.markers.map((s) =>
+          s.id === id ? ({ ...s, ...patch } as Marker) : s
+        ),
+      };
+      persist(next);
+      return next;
     });
   };
 
-  const onMouseUp = () => {
-    if (draggingMarker) {
-      persistMarkers(markers);
-      setDraggingMarker(null);
-    }
-    if (draggingZone) {
-      persistPositions(positions);
-      setDraggingZone(null);
-    }
+  const clearMap = () => {
+    if (!confirm("맵의 모든 영역·강·마커를 지울까요?")) return;
+    saveData({ polygons: [], lines: [], markers: [] });
+    setSelectedId(null);
   };
 
-  const removeSelected = () => {
-    if (!selected) return;
-    if (selected.startsWith("marker:")) {
-      const id = selected.slice(7);
-      const next = markers.filter((m) => m.id !== id);
-      setMarkers(next);
-      persistMarkers(next);
-      setSelected(null);
-    }
-    // 구역(zone:) 삭제는 zones 관리 페이지에서만 가능 — 여기선 위치 초기화만 제공
-  };
-
-  const updateSelectedMarker = (patch: Partial<Marker>) => {
-    if (!selected?.startsWith("marker:")) return;
-    const id = selected.slice(7);
-    const next = markers.map((m) => (m.id === id ? { ...m, ...patch } : m));
-    setMarkers(next);
-    persistMarkers(next);
-  };
-
-  const resetAll = async () => {
-    if (!confirm("배치와 장식을 모두 초기화할까요?")) return;
-    const reset: Record<string, Pos> = {};
-    zones.forEach((z, i) => {
-      reset[z.name] =
-        DEFAULTS[z.name] ?? { x: 5 + (i % 4) * 22, y: 80, w: 16, h: 14 };
-    });
-    setPositions(reset);
-    setMarkers([...DEFAULT_MARKERS]);
-    await Promise.all([persistPositions(reset), persistMarkers(DEFAULT_MARKERS)]);
-    setSelected(null);
-  };
-
-  const selectedKind = selected?.split(":")[0];
-  const selectedZone = useMemo(() => {
-    if (selected?.startsWith("zone:"))
-      return zones.find((z) => z.name === selected.slice(5)) ?? null;
-    return null;
-  }, [selected, zones]);
-  const selectedMarker = useMemo(() => {
-    if (selected?.startsWith("marker:"))
-      return markers.find((m) => m.id === selected.slice(7)) ?? null;
-    return null;
-  }, [selected, markers]);
+  const selected = useMemo(() => {
+    if (!selectedId) return null;
+    return (
+      data.polygons.find((s) => s.id === selectedId) ??
+      data.lines.find((s) => s.id === selectedId) ??
+      data.markers.find((s) => s.id === selectedId) ??
+      null
+    );
+  }, [selectedId, data]);
 
   if (loading)
     return (
@@ -366,6 +461,12 @@ export default function SpaceMapView() {
         <p style={{ color: "var(--space-fg-muted)" }}>로딩 중...</p>
       </div>
     );
+
+  // 그리는 중 미리보기 polyline
+  const previewPoints =
+    drawingPoints.length > 0 && hoverPoint
+      ? [...drawingPoints, hoverPoint]
+      : drawingPoints;
 
   return (
     <div>
@@ -376,7 +477,7 @@ export default function SpaceMapView() {
             className="text-sm mt-1"
             style={{ color: "var(--space-fg-muted)" }}
           >
-            구역을 자유롭게 배치하고 마커로 꾸며보세요
+            영역을 나누고 강과 길을 그려 직접 지도를 만드세요
           </p>
         </div>
         {isOwner && (
@@ -384,7 +485,9 @@ export default function SpaceMapView() {
             <button
               onClick={() => {
                 setEditMode((m) => !m);
-                if (editMode) setTool("select");
+                setSelectedId(null);
+                cancelDrawing();
+                setTool("select");
               }}
               className="px-4 py-2 rounded-lg text-sm font-medium text-white"
               style={{
@@ -395,21 +498,21 @@ export default function SpaceMapView() {
             </button>
             {editMode && (
               <button
-                onClick={resetAll}
-                className="px-4 py-2 rounded-lg text-sm border"
+                onClick={clearMap}
+                className="px-3 py-2 rounded-lg text-xs border"
                 style={{
-                  borderColor: "var(--space-border)",
-                  color: "var(--space-fg-muted)",
+                  borderColor: "rgba(229,91,91,0.5)",
+                  color: "#e55b5b",
                 }}
               >
-                전체 초기화
+                전체 지우기
               </button>
             )}
           </div>
         )}
       </div>
 
-      {/* 도구 모음 — 편집 모드일 때만 */}
+      {/* 도구 모음 */}
       {editMode && isOwner && (
         <div
           className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border p-2 text-sm"
@@ -418,326 +521,564 @@ export default function SpaceMapView() {
             borderColor: "var(--space-border)",
           }}
         >
-          <button
-            type="button"
-            onClick={() => setTool("select")}
-            className="rounded px-3 py-1 text-xs"
-            style={
-              tool === "select"
-                ? { background: "var(--space-accent)", color: "white" }
-                : { color: "var(--space-fg-muted)" }
-            }
-          >
-            ↖ 선택/이동
-          </button>
-          <button
-            type="button"
-            onClick={() => setTool("marker")}
-            className="rounded px-3 py-1 text-xs"
-            style={
-              tool === "marker"
-                ? { background: "var(--space-accent)", color: "white" }
-                : { color: "var(--space-fg-muted)" }
-            }
-          >
-            ✨ 마커 찍기
-          </button>
-          <span className="mx-1 h-5 w-px" style={{ background: "var(--space-border)" }} />
-          <span className="text-xs" style={{ color: "var(--space-fg-soft)" }}>
-            마커:
-          </span>
-          <div className="flex flex-wrap gap-1">
-            {MARKER_EMOJIS.map((em) => (
-              <button
-                key={em}
-                type="button"
-                onClick={() => {
-                  setPendingEmoji(em);
-                  setTool("marker");
-                }}
-                className="text-base p-1 rounded hover:bg-[var(--space-card-hover)]"
-                style={
-                  pendingEmoji === em && tool === "marker"
-                    ? {
-                        background: "var(--space-accent-soft)",
-                        outline: "2px solid var(--space-accent)",
-                      }
-                    : {}
-                }
-              >
-                {em}
-              </button>
-            ))}
-          </div>
-          {selected && (
+          <ToolBtn active={tool === "select"} onClick={() => setTool("select")}>
+            ↖ 선택
+          </ToolBtn>
+          <ToolBtn active={tool === "area"} onClick={() => setTool("area")}>
+            ⬡ 영역
+          </ToolBtn>
+          <ToolBtn active={tool === "river"} onClick={() => setTool("river")}>
+            〰 강·길
+          </ToolBtn>
+          <ToolBtn active={tool === "marker"} onClick={() => setTool("marker")}>
+            ✨ 마커
+          </ToolBtn>
+          <ToolBtn active={tool === "delete"} onClick={() => setTool("delete")}>
+            ✕ 삭제
+          </ToolBtn>
+          {drawingPoints.length > 0 && (
             <>
               <span
                 className="mx-1 h-5 w-px"
                 style={{ background: "var(--space-border)" }}
               />
-              {selected.startsWith("marker:") && (
-                <button
-                  onClick={removeSelected}
-                  className="rounded px-2 py-1 text-xs"
-                  style={{
-                    background: "rgba(229,91,91,0.15)",
-                    color: "#e55b5b",
-                  }}
-                >
-                  마커 삭제
-                </button>
-              )}
+              <span
+                className="text-xs"
+                style={{ color: "var(--space-fg-soft)" }}
+              >
+                점 {drawingPoints.length}개
+              </span>
+              <button
+                onClick={finishDrawing}
+                className="rounded-full px-3 py-1 text-xs text-white"
+                style={{ background: "var(--space-accent)" }}
+              >
+                완료 (Enter)
+              </button>
+              <button
+                onClick={cancelDrawing}
+                className="rounded px-2 py-1 text-xs"
+                style={{ color: "var(--space-fg-muted)" }}
+              >
+                취소 (Esc)
+              </button>
             </>
           )}
         </div>
       )}
 
       <div className="grid lg:grid-cols-[1fr_280px] gap-4">
-        <div
-          ref={mapRef}
-          onMouseDown={onMapMouseDown}
-          onMouseMove={onMouseMove}
-          onMouseUp={onMouseUp}
-          onMouseLeave={onMouseUp}
-          className="relative rounded-2xl border overflow-hidden"
+        {/* 캔버스 */}
+        <svg
+          ref={svgRef}
+          viewBox="0 0 100 100"
+          preserveAspectRatio="none"
+          onMouseDown={onCanvasMouseDown}
+          onMouseMove={onCanvasMouseMove}
+          onMouseUp={onCanvasMouseUp}
+          onMouseLeave={onCanvasMouseUp}
+          onDoubleClick={onCanvasDoubleClick}
+          className="rounded-2xl border w-full"
           style={{
-            background:
-              "radial-gradient(ellipse at center, rgba(74,168,216,0.06) 0%, var(--space-card) 70%)",
-            borderColor: "var(--space-border)",
             aspectRatio: "1 / 1",
+            background:
+              "radial-gradient(ellipse at center, rgba(74,168,216,0.05) 0%, var(--space-card) 70%)",
+            borderColor: "var(--space-border)",
             cursor:
-              editMode && tool === "marker" ? "crosshair" : "default",
-            userSelect: draggingZone || draggingMarker ? "none" : "auto",
+              !editMode || !isOwner
+                ? "default"
+                : tool === "area" || tool === "river" || tool === "marker"
+                  ? "crosshair"
+                  : tool === "delete"
+                    ? "not-allowed"
+                    : "default",
+            userSelect: "none",
+            touchAction: "none",
           }}
         >
-          {zones.map((z) => {
-            const pos =
-              positions[z.name] ??
-              DEFAULTS[z.name] ?? { x: 0, y: 0, w: 16, h: 14 };
-            const isSelected = selected === `zone:${z.name}`;
-            return (
-              <div
-                key={z.id}
-                onMouseDown={(e) => {
-                  if (editMode && tool === "select")
-                    onZoneMouseDown(e, z.name, "move");
-                  else if (!editMode) setSelected(`zone:${z.name}`);
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelected(`zone:${z.name}`);
-                }}
-                className="absolute rounded-xl flex flex-col items-center justify-center text-center transition-shadow"
-                style={{
-                  left: `${pos.x}%`,
-                  top: `${pos.y}%`,
-                  width: `${pos.w}%`,
-                  height: `${pos.h}%`,
-                  background: `${z.color}33`,
-                  borderColor: z.color,
-                  borderWidth: 2,
-                  borderStyle: "solid",
-                  cursor:
-                    editMode && tool === "select" ? "move" : "pointer",
-                  boxShadow: isSelected
-                    ? `0 0 0 3px ${z.color}66`
-                    : "0 2px 8px rgba(74,168,216,0.1)",
-                }}
-              >
-                <span className="text-2xl pointer-events-none">{z.icon}</span>
-                <span
-                  className="text-xs font-semibold mt-1 px-2 pointer-events-none"
-                  style={{ color: "var(--space-fg)" }}
-                >
-                  {z.name}
-                </span>
-                {/* 8방향 리사이즈 핸들 — 편집 모드 + 선택됐을 때만 */}
-                {editMode && isOwner && tool === "select" && isSelected && (
-                  <>
-                    <Handle dir="resize-tl" onDown={(e) => onZoneMouseDown(e, z.name, "resize-tl")} />
-                    <Handle dir="resize-tr" onDown={(e) => onZoneMouseDown(e, z.name, "resize-tr")} />
-                    <Handle dir="resize-bl" onDown={(e) => onZoneMouseDown(e, z.name, "resize-bl")} />
-                    <Handle dir="resize-br" onDown={(e) => onZoneMouseDown(e, z.name, "resize-br")} />
-                    <Handle dir="resize-t" onDown={(e) => onZoneMouseDown(e, z.name, "resize-t")} />
-                    <Handle dir="resize-b" onDown={(e) => onZoneMouseDown(e, z.name, "resize-b")} />
-                    <Handle dir="resize-l" onDown={(e) => onZoneMouseDown(e, z.name, "resize-l")} />
-                    <Handle dir="resize-r" onDown={(e) => onZoneMouseDown(e, z.name, "resize-r")} />
-                  </>
-                )}
-              </div>
-            );
-          })}
-
-          {/* 마커들 */}
-          {markers.map((m) => {
-            const isSelected = selected === `marker:${m.id}`;
-            const fontSize = 12 + m.size * 6;
-            return (
-              <div
-                key={m.id}
-                onMouseDown={(e) => {
-                  if (editMode && tool === "select") onMarkerMouseDown(e, m.id);
-                }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelected(`marker:${m.id}`);
-                }}
-                className="absolute -translate-x-1/2 -translate-y-1/2 select-none"
-                style={{
-                  left: `${m.x}%`,
-                  top: `${m.y}%`,
-                  fontSize,
-                  cursor:
-                    editMode && tool === "select" ? "move" : "default",
-                  filter: isSelected
-                    ? "drop-shadow(0 0 6px var(--space-accent))"
-                    : "none",
-                }}
-                title={m.label}
-              >
-                {m.emoji}
-              </div>
-            );
-          })}
-
-          {zones.length === 0 && (
-            <div
-              className="absolute inset-0 flex items-center justify-center pointer-events-none"
-              style={{ color: "var(--space-fg-soft)" }}
+          {/* 격자 */}
+          <defs>
+            <pattern
+              id="map-grid"
+              width="5"
+              height="5"
+              patternUnits="userSpaceOnUse"
             >
-              <div className="text-center">
-                <span className="text-5xl block mb-2">🗺️</span>
-                <p>구역을 먼저 추가하세요</p>
-              </div>
-            </div>
-          )}
-        </div>
+              <path
+                d="M 5 0 L 0 0 0 5"
+                fill="none"
+                stroke="rgba(0,0,0,0.04)"
+                strokeWidth="0.1"
+              />
+            </pattern>
+          </defs>
+          <rect
+            x="0"
+            y="0"
+            width="100"
+            height="100"
+            fill="url(#map-grid)"
+            pointerEvents="none"
+          />
 
-        {/* 우측 속성 패널 */}
+          {/* 폴리곤 (영역) */}
+          {data.polygons.map((p) => {
+            const isSel = selectedId === p.id;
+            const ptsStr = p.points.map((pt) => `${pt.x},${pt.y}`).join(" ");
+            return (
+              <g key={p.id}>
+                <polygon
+                  points={ptsStr}
+                  fill={p.color}
+                  fillOpacity={0.35}
+                  stroke={p.color}
+                  strokeWidth={isSel ? 0.6 : 0.4}
+                  strokeLinejoin="round"
+                  onMouseDown={(e) => onShapeMouseDown(e, p)}
+                  style={{
+                    cursor:
+                      editMode && tool === "select" ? "move" : "pointer",
+                  }}
+                />
+                {p.label && (
+                  <text
+                    x={
+                      p.points.reduce((s, pt) => s + pt.x, 0) / p.points.length
+                    }
+                    y={
+                      p.points.reduce((s, pt) => s + pt.y, 0) / p.points.length
+                    }
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize="2.2"
+                    fontWeight="600"
+                    fill={p.color}
+                    paintOrder="stroke"
+                    stroke="rgba(255,255,255,0.85)"
+                    strokeWidth="0.6"
+                    pointerEvents="none"
+                  >
+                    {p.label}
+                  </text>
+                )}
+                {/* 꼭짓점 핸들 */}
+                {isSel &&
+                  editMode &&
+                  isOwner &&
+                  tool === "select" &&
+                  p.points.map((pt, i) => (
+                    <circle
+                      key={i}
+                      cx={pt.x}
+                      cy={pt.y}
+                      r={0.9}
+                      fill="white"
+                      stroke={p.color}
+                      strokeWidth={0.4}
+                      style={{ cursor: "grab" }}
+                      onMouseDown={(e) => onVertexMouseDown(e, p, i)}
+                    />
+                  ))}
+              </g>
+            );
+          })}
+
+          {/* 라인 (강·길) */}
+          {data.lines.map((l) => {
+            const isSel = selectedId === l.id;
+            const ptsStr = l.points.map((pt) => `${pt.x},${pt.y}`).join(" ");
+            return (
+              <g key={l.id}>
+                <polyline
+                  points={ptsStr}
+                  fill="none"
+                  stroke={l.color}
+                  strokeWidth={l.thickness + (isSel ? 0.3 : 0)}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  onMouseDown={(e) => onShapeMouseDown(e, l)}
+                  style={{
+                    cursor:
+                      editMode && tool === "select" ? "move" : "pointer",
+                  }}
+                />
+                {/* 클릭 영역 확장용 투명 라인 */}
+                <polyline
+                  points={ptsStr}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth={Math.max(l.thickness + 1.5, 2)}
+                  onMouseDown={(e) => onShapeMouseDown(e, l)}
+                  style={{
+                    cursor:
+                      editMode && tool === "select" ? "move" : "pointer",
+                  }}
+                />
+                {isSel &&
+                  editMode &&
+                  isOwner &&
+                  tool === "select" &&
+                  l.points.map((pt, i) => (
+                    <circle
+                      key={i}
+                      cx={pt.x}
+                      cy={pt.y}
+                      r={0.9}
+                      fill="white"
+                      stroke={l.color}
+                      strokeWidth={0.4}
+                      style={{ cursor: "grab" }}
+                      onMouseDown={(e) => onVertexMouseDown(e, l, i)}
+                    />
+                  ))}
+              </g>
+            );
+          })}
+
+          {/* 마커 */}
+          {data.markers.map((m) => {
+            const isSel = selectedId === m.id;
+            return (
+              <g
+                key={m.id}
+                onMouseDown={(e) => onShapeMouseDown(e, m)}
+                style={{
+                  cursor: editMode && tool === "select" ? "move" : "pointer",
+                }}
+              >
+                <text
+                  x={m.x}
+                  y={m.y + 1.5}
+                  textAnchor="middle"
+                  fontSize="4"
+                  style={{
+                    filter: isSel
+                      ? "drop-shadow(0 0 0.6px var(--space-accent))"
+                      : "drop-shadow(0 0.1px 0.3px rgba(0,0,0,0.3))",
+                  }}
+                >
+                  {m.emoji}
+                </text>
+              </g>
+            );
+          })}
+
+          {/* 그리는 중 미리보기 */}
+          {drawingPoints.length > 0 && (
+            <g pointerEvents="none">
+              {tool === "area" ? (
+                <polygon
+                  points={previewPoints
+                    .map((pt) => `${pt.x},${pt.y}`)
+                    .join(" ")}
+                  fill={areaColor}
+                  fillOpacity={0.18}
+                  stroke={areaColor}
+                  strokeWidth={0.4}
+                  strokeDasharray="0.8 0.4"
+                />
+              ) : (
+                <polyline
+                  points={previewPoints
+                    .map((pt) => `${pt.x},${pt.y}`)
+                    .join(" ")}
+                  fill="none"
+                  stroke={riverColor}
+                  strokeWidth={riverThickness}
+                  strokeDasharray="0.8 0.4"
+                  strokeLinecap="round"
+                />
+              )}
+              {drawingPoints.map((pt, i) => (
+                <circle
+                  key={i}
+                  cx={pt.x}
+                  cy={pt.y}
+                  r={0.7}
+                  fill="white"
+                  stroke={tool === "area" ? areaColor : riverColor}
+                  strokeWidth={0.3}
+                />
+              ))}
+            </g>
+          )}
+        </svg>
+
+        {/* 우측 패널 */}
         <aside
-          className="rounded-xl p-4 border h-fit"
+          className="rounded-xl p-4 border h-fit space-y-4"
           style={{
             background: "var(--space-card)",
             borderColor: "var(--space-border)",
           }}
         >
-          {selectedZone ? (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <span className="text-2xl">{selectedZone.icon}</span>
-                <h3 className="font-bold">{selectedZone.name}</h3>
-              </div>
-              <p
-                className="text-xs mb-3"
-                style={{ color: "var(--space-fg-soft)" }}
-              >
-                {selectedZone.ecosystem_type} · {selectedZone.climate ?? "—"}
-              </p>
-              {selectedZone.description && (
-                <p
-                  className="text-sm mb-3"
-                  style={{ color: "var(--space-fg-muted)" }}
-                >
-                  {selectedZone.description}
-                </p>
-              )}
-              <div
-                className="flex justify-between text-xs pt-3 border-t mb-3"
-                style={{ borderColor: "var(--space-border)" }}
-              >
-                <span>🌱 식물 {selectedZone.plant_count}</span>
-                <span>🦊 생물 {selectedZone.creature_count}</span>
-              </div>
-              {editMode && isOwner && (
-                <p
-                  className="text-xs"
-                  style={{ color: "var(--space-fg-soft)" }}
-                >
-                  드래그로 이동, 8개 핸들로 크기 조절. 구역 자체의 이름·색·삭제는 <strong>구역 관리</strong> 페이지에서.
-                </p>
-              )}
-            </div>
-          ) : selectedMarker ? (
+          {/* 영역 도구 — 색상 선택 */}
+          {editMode && isOwner && tool === "area" && (
             <div>
               <p
-                className="text-xs font-medium mb-3"
+                className="text-xs font-medium mb-2"
                 style={{ color: "var(--space-fg-muted)" }}
               >
-                ✨ 마커 속성
+                영역 색
               </p>
-              <label className="block text-xs mb-1" style={{ color: "var(--space-fg-muted)" }}>
-                이모지
-              </label>
-              <input
-                type="text"
-                value={selectedMarker.emoji}
-                onChange={(e) => updateSelectedMarker({ emoji: e.target.value })}
-                disabled={!editMode || !isOwner}
-                maxLength={4}
-                className="w-full rounded border px-2 py-1 text-xl text-center mb-3"
-                style={{
-                  background: "var(--space-bg)",
-                  borderColor: "var(--space-border)",
-                  color: "var(--space-fg)",
-                }}
-              />
-              <label className="block text-xs mb-1" style={{ color: "var(--space-fg-muted)" }}>
-                이름
-              </label>
-              <input
-                type="text"
-                value={selectedMarker.label}
-                onChange={(e) => updateSelectedMarker({ label: e.target.value })}
-                disabled={!editMode || !isOwner}
-                className="w-full rounded border px-2 py-1 text-sm mb-3"
-                style={{
-                  background: "var(--space-bg)",
-                  borderColor: "var(--space-border)",
-                  color: "var(--space-fg)",
-                }}
-              />
-              <label className="block text-xs mb-1" style={{ color: "var(--space-fg-muted)" }}>
-                크기 ({selectedMarker.size})
+              <div className="flex gap-2 flex-wrap">
+                {AREA_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setAreaColor(c)}
+                    className="h-7 w-7 rounded-full ring-2"
+                    style={{
+                      background: c,
+                      borderColor: c,
+                      outline:
+                        areaColor === c
+                          ? "2px solid var(--space-accent)"
+                          : "none",
+                    }}
+                  />
+                ))}
+                <input
+                  type="color"
+                  value={areaColor}
+                  onChange={(e) => setAreaColor(e.target.value)}
+                  className="h-7 w-7 cursor-pointer rounded-full"
+                  title="직접 색상"
+                />
+              </div>
+              <p
+                className="mt-3 text-xs"
+                style={{ color: "var(--space-fg-soft)" }}
+              >
+                캔버스 클릭으로 점을 찍고, 첫 점 근처를 다시 클릭하거나 Enter로 영역을 닫아요.
+              </p>
+            </div>
+          )}
+
+          {/* 강·길 도구 */}
+          {editMode && isOwner && tool === "river" && (
+            <div>
+              <p
+                className="text-xs font-medium mb-2"
+                style={{ color: "var(--space-fg-muted)" }}
+              >
+                강·길 색
+              </p>
+              <div className="flex gap-2 flex-wrap mb-3">
+                {RIVER_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setRiverColor(c)}
+                    className="h-7 w-7 rounded-full"
+                    style={{
+                      background: c,
+                      outline:
+                        riverColor === c
+                          ? "2px solid var(--space-accent)"
+                          : "none",
+                    }}
+                  />
+                ))}
+                <input
+                  type="color"
+                  value={riverColor}
+                  onChange={(e) => setRiverColor(e.target.value)}
+                  className="h-7 w-7 cursor-pointer rounded-full"
+                />
+              </div>
+              <label
+                className="block text-xs mb-1"
+                style={{ color: "var(--space-fg-muted)" }}
+              >
+                굵기 ({riverThickness.toFixed(1)})
               </label>
               <input
                 type="range"
-                min={1}
+                min={0.3}
                 max={3}
-                value={selectedMarker.size}
+                step={0.1}
+                value={riverThickness}
                 onChange={(e) =>
-                  updateSelectedMarker({ size: parseInt(e.target.value, 10) })
+                  setRiverThickness(parseFloat(e.target.value))
+                }
+                className="w-full mb-2"
+              />
+              <p
+                className="text-xs"
+                style={{ color: "var(--space-fg-soft)" }}
+              >
+                점을 찍어 경로를 만들고 Enter 또는 더블클릭으로 마무리.
+              </p>
+            </div>
+          )}
+
+          {/* 마커 도구 */}
+          {editMode && isOwner && tool === "marker" && (
+            <div>
+              <p
+                className="text-xs font-medium mb-2"
+                style={{ color: "var(--space-fg-muted)" }}
+              >
+                마커 (선택 후 캔버스 클릭)
+              </p>
+              <div className="grid grid-cols-6 gap-1 max-h-72 overflow-auto">
+                {MARKER_EMOJIS.map((em) => (
+                  <button
+                    key={em}
+                    onClick={() => setPendingEmoji(em)}
+                    className="text-xl p-1 rounded"
+                    style={
+                      pendingEmoji === em
+                        ? {
+                            background: "var(--space-accent-soft)",
+                            outline: "2px solid var(--space-accent)",
+                          }
+                        : {}
+                    }
+                  >
+                    {em}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 선택된 도형 속성 */}
+          {selected && (
+            <div
+              className="space-y-2 pt-3"
+              style={{
+                borderTop:
+                  tool === "select" ? "none" : "1px solid var(--space-border)",
+              }}
+            >
+              <p
+                className="text-xs font-medium"
+                style={{ color: "var(--space-fg-muted)" }}
+              >
+                {selected.kind === "polygon"
+                  ? "⬡ 영역"
+                  : selected.kind === "line"
+                    ? "〰 강·길"
+                    : "✨ 마커"}{" "}
+                속성
+              </p>
+              {selected.kind === "marker" && (
+                <>
+                  <label
+                    className="block text-xs"
+                    style={{ color: "var(--space-fg-muted)" }}
+                  >
+                    이모지
+                  </label>
+                  <input
+                    type="text"
+                    value={selected.emoji}
+                    onChange={(e) =>
+                      updateShape(selected.id, { emoji: e.target.value })
+                    }
+                    disabled={!editMode || !isOwner}
+                    maxLength={4}
+                    className="w-full rounded border px-2 py-1 text-xl text-center"
+                    style={{
+                      background: "var(--space-bg)",
+                      borderColor: "var(--space-border)",
+                      color: "var(--space-fg)",
+                    }}
+                  />
+                </>
+              )}
+              <label
+                className="block text-xs"
+                style={{ color: "var(--space-fg-muted)" }}
+              >
+                이름 (선택)
+              </label>
+              <input
+                type="text"
+                value={selected.label ?? ""}
+                onChange={(e) =>
+                  updateShape(selected.id, { label: e.target.value } as Partial<Shape>)
                 }
                 disabled={!editMode || !isOwner}
-                className="w-full mb-3"
+                className="w-full rounded border px-2 py-1 text-sm"
+                style={{
+                  background: "var(--space-bg)",
+                  borderColor: "var(--space-border)",
+                  color: "var(--space-fg)",
+                }}
               />
+              {(selected.kind === "polygon" || selected.kind === "line") && (
+                <>
+                  <label
+                    className="block text-xs"
+                    style={{ color: "var(--space-fg-muted)" }}
+                  >
+                    색상
+                  </label>
+                  <input
+                    type="color"
+                    value={selected.color}
+                    onChange={(e) =>
+                      updateShape(selected.id, {
+                        color: e.target.value,
+                      } as Partial<Shape>)
+                    }
+                    disabled={!editMode || !isOwner}
+                    className="h-8 w-16 cursor-pointer rounded"
+                  />
+                </>
+              )}
+              {selected.kind === "line" && (
+                <>
+                  <label
+                    className="block text-xs"
+                    style={{ color: "var(--space-fg-muted)" }}
+                  >
+                    굵기 ({selected.thickness.toFixed(1)})
+                  </label>
+                  <input
+                    type="range"
+                    min={0.3}
+                    max={3}
+                    step={0.1}
+                    value={selected.thickness}
+                    onChange={(e) =>
+                      updateShape(selected.id, {
+                        thickness: parseFloat(e.target.value),
+                      } as Partial<Shape>)
+                    }
+                    disabled={!editMode || !isOwner}
+                    className="w-full"
+                  />
+                </>
+              )}
               {editMode && isOwner && (
                 <button
-                  onClick={removeSelected}
+                  onClick={() => deleteShape(selected.id)}
                   className="w-full rounded px-2 py-1 text-xs"
                   style={{
                     background: "rgba(229,91,91,0.15)",
                     color: "#e55b5b",
                   }}
                 >
-                  마커 삭제
+                  삭제
                 </button>
               )}
             </div>
-          ) : (
+          )}
+
+          {!selected && tool === "select" && (
             <div
-              className="text-sm text-center py-6"
+              className="text-sm text-center py-4"
               style={{ color: "var(--space-fg-soft)" }}
             >
-              <p className="mb-2">구역이나 마커를 선택하면<br />속성이 표시됩니다.</p>
-              {editMode && isOwner && tool === "marker" && (
-                <p className="mt-3 text-xs">
-                  맵 빈 곳을 클릭해 <span className="text-2xl align-middle">{pendingEmoji}</span> 마커를 찍으세요
-                </p>
-              )}
-              {editMode && isOwner && tool === "select" && (
-                <p className="mt-3 text-xs">
-                  구역 클릭 → 8방향 핸들로 자유 분할.<br />
-                  마커는 드래그로 이동.
+              <p className="mb-2">
+                영역 {data.polygons.length} · 강·길 {data.lines.length} · 마커{" "}
+                {data.markers.length}
+              </p>
+              {editMode && isOwner && (
+                <p className="text-xs">
+                  도형을 클릭해 선택하면 색·이름·꼭짓점을 편집할 수 있어요.
                 </p>
               )}
             </div>
@@ -748,44 +1089,27 @@ export default function SpaceMapView() {
   );
 }
 
-function Handle({
-  dir,
-  onDown,
+function ToolBtn({
+  active,
+  onClick,
+  children,
 }: {
-  dir: DragMode;
-  onDown: (e: React.MouseEvent) => void;
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
-  const style: React.CSSProperties = {
-    position: "absolute",
-    width: 10,
-    height: 10,
-    background: "white",
-    border: "2px solid var(--space-accent)",
-    borderRadius: 2,
-  };
-  let cursor = "default";
-  switch (dir) {
-    case "resize-tl":
-      style.top = -5; style.left = -5; cursor = "nwse-resize"; break;
-    case "resize-tr":
-      style.top = -5; style.right = -5; cursor = "nesw-resize"; break;
-    case "resize-bl":
-      style.bottom = -5; style.left = -5; cursor = "nesw-resize"; break;
-    case "resize-br":
-      style.bottom = -5; style.right = -5; cursor = "nwse-resize"; break;
-    case "resize-t":
-      style.top = -5; style.left = "calc(50% - 5px)"; cursor = "ns-resize"; break;
-    case "resize-b":
-      style.bottom = -5; style.left = "calc(50% - 5px)"; cursor = "ns-resize"; break;
-    case "resize-l":
-      style.left = -5; style.top = "calc(50% - 5px)"; cursor = "ew-resize"; break;
-    case "resize-r":
-      style.right = -5; style.top = "calc(50% - 5px)"; cursor = "ew-resize"; break;
-  }
   return (
-    <span
-      onMouseDown={onDown}
-      style={{ ...style, cursor }}
-    />
+    <button
+      type="button"
+      onClick={onClick}
+      className="rounded px-3 py-1 text-xs"
+      style={
+        active
+          ? { background: "var(--space-accent)", color: "white" }
+          : { color: "var(--space-fg-muted)" }
+      }
+    >
+      {children}
+    </button>
   );
 }
