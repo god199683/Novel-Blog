@@ -67,14 +67,24 @@
 .space-app .grade-Ex { background: linear-gradient(135deg, #e8a63a, #e55b5b, #8b7ec8); }
 
 /* 토글 스위치 */
+.space-app button.toggle-switch,
 .space-app .toggle-switch {
   position: relative;
   width: 48px;
   height: 24px;
   background: #b8cfe0;
+  border: none;
+  padding: 0;
   border-radius: 12px;
   cursor: pointer;
   transition: background 0.3s;
+  flex-shrink: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.space-app .toggle-switch:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 .space-app .toggle-switch.active {
   background: var(--space-accent);

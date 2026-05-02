@@ -38,7 +38,15 @@ type Marker = {
 
 type Shape = Polygon | Line | Marker;
 
-type Tool = "select" | "area" | "river" | "marker" | "delete";
+type Tool =
+  | "select"
+  | "area"
+  | "rect"
+  | "ellipse"
+  | "freehand"
+  | "river"
+  | "marker"
+  | "delete";
 
 type MapData = {
   polygons: Polygon[];
@@ -63,6 +71,32 @@ const MARKER_EMOJIS = [
 const newId = () =>
   `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
+function buildRectPoints(a: Vec, b: Vec): Vec[] {
+  const x1 = Math.min(a.x, b.x);
+  const y1 = Math.min(a.y, b.y);
+  const x2 = Math.max(a.x, b.x);
+  const y2 = Math.max(a.y, b.y);
+  return [
+    { x: x1, y: y1 },
+    { x: x2, y: y1 },
+    { x: x2, y: y2 },
+    { x: x1, y: y2 },
+  ];
+}
+
+function buildEllipsePoints(a: Vec, b: Vec, segments = 36): Vec[] {
+  const cx = (a.x + b.x) / 2;
+  const cy = (a.y + b.y) / 2;
+  const rx = Math.abs(b.x - a.x) / 2;
+  const ry = Math.abs(b.y - a.y) / 2;
+  const pts: Vec[] = [];
+  for (let i = 0; i < segments; i++) {
+    const t = (i / segments) * Math.PI * 2;
+    pts.push({ x: cx + Math.cos(t) * rx, y: cy + Math.sin(t) * ry });
+  }
+  return pts;
+}
+
 export default function SpaceMapView() {
   const { space, isOwner } = useSpace();
   const [data, setData] = useState<MapData>(DEFAULT_DATA);
@@ -79,6 +113,12 @@ export default function SpaceMapView() {
   // 그리는 중인 임시 도형
   const [drawingPoints, setDrawingPoints] = useState<Vec[]>([]);
   const [hoverPoint, setHoverPoint] = useState<Vec | null>(null);
+  // rect / ellipse 드래그 그리기
+  const [dragShapeStart, setDragShapeStart] = useState<Vec | null>(null);
+  const [dragShapeEnd, setDragShapeEnd] = useState<Vec | null>(null);
+  // freehand
+  const [freehandPoints, setFreehandPoints] = useState<Vec[]>([]);
+  const isFreehandingRef = useRef(false);
 
   // 드래그 중인 도형 정보
   const dragRef = useRef<{
@@ -191,6 +231,18 @@ export default function SpaceMapView() {
       return;
     }
 
+    if (tool === "rect" || tool === "ellipse") {
+      setDragShapeStart(pt);
+      setDragShapeEnd(pt);
+      return;
+    }
+
+    if (tool === "freehand") {
+      isFreehandingRef.current = true;
+      setFreehandPoints([pt]);
+      return;
+    }
+
     if (tool === "select") {
       // 빈 공간 클릭 → 선택 해제
       if (e.target === e.currentTarget) setSelectedId(null);
@@ -204,6 +256,20 @@ export default function SpaceMapView() {
 
     if (editMode && (tool === "area" || tool === "river")) {
       setHoverPoint(pt);
+    }
+
+    if (editMode && dragShapeStart && (tool === "rect" || tool === "ellipse")) {
+      setDragShapeEnd(pt);
+    }
+
+    if (editMode && tool === "freehand" && isFreehandingRef.current) {
+      setFreehandPoints((prev) => {
+        const last = prev[prev.length - 1];
+        if (!last) return [pt];
+        // 이전 점과 1.2% 이상 떨어져 있을 때만 기록 — 점 너무 많아지지 않게
+        if (Math.hypot(pt.x - last.x, pt.y - last.y) < 1.2) return prev;
+        return [...prev, pt];
+      });
     }
 
     if (dragRef.current && editMode) {
@@ -287,6 +353,51 @@ export default function SpaceMapView() {
     if (dragRef.current) {
       dragRef.current = null;
       persist(data);
+    }
+
+    // 사각형 / 타원 그리기 완료
+    if (
+      editMode &&
+      dragShapeStart &&
+      dragShapeEnd &&
+      (tool === "rect" || tool === "ellipse")
+    ) {
+      const w = Math.abs(dragShapeEnd.x - dragShapeStart.x);
+      const h = Math.abs(dragShapeEnd.y - dragShapeStart.y);
+      if (w >= 1 && h >= 1) {
+        const points =
+          tool === "rect"
+            ? buildRectPoints(dragShapeStart, dragShapeEnd)
+            : buildEllipsePoints(dragShapeStart, dragShapeEnd, 36);
+        const poly: Polygon = {
+          id: newId(),
+          kind: "polygon",
+          points,
+          color: areaColor,
+        };
+        saveData({ ...data, polygons: [...data.polygons, poly] });
+        setSelectedId(poly.id);
+      }
+      setDragShapeStart(null);
+      setDragShapeEnd(null);
+      setTool("select");
+    }
+
+    // 자유 그리기 완료
+    if (editMode && isFreehandingRef.current && tool === "freehand") {
+      isFreehandingRef.current = false;
+      if (freehandPoints.length >= 3) {
+        const poly: Polygon = {
+          id: newId(),
+          kind: "polygon",
+          points: freehandPoints,
+          color: areaColor,
+        };
+        saveData({ ...data, polygons: [...data.polygons, poly] });
+        setSelectedId(poly.id);
+      }
+      setFreehandPoints([]);
+      setTool("select");
     }
   };
 
@@ -525,7 +636,16 @@ export default function SpaceMapView() {
             ↖ 선택
           </ToolBtn>
           <ToolBtn active={tool === "area"} onClick={() => setTool("area")}>
-            ⬡ 영역
+            ⬡ 영역(다각형)
+          </ToolBtn>
+          <ToolBtn active={tool === "rect"} onClick={() => setTool("rect")}>
+            ▭ 사각형
+          </ToolBtn>
+          <ToolBtn active={tool === "ellipse"} onClick={() => setTool("ellipse")}>
+            ◯ 원/타원
+          </ToolBtn>
+          <ToolBtn active={tool === "freehand"} onClick={() => setTool("freehand")}>
+            ✏️ 자유 그리기
           </ToolBtn>
           <ToolBtn active={tool === "river"} onClick={() => setTool("river")}>
             〰 강·길
@@ -587,7 +707,12 @@ export default function SpaceMapView() {
             cursor:
               !editMode || !isOwner
                 ? "default"
-                : tool === "area" || tool === "river" || tool === "marker"
+                : tool === "area" ||
+                    tool === "rect" ||
+                    tool === "ellipse" ||
+                    tool === "freehand" ||
+                    tool === "river" ||
+                    tool === "marker"
                   ? "crosshair"
                   : tool === "delete"
                     ? "not-allowed"
@@ -763,6 +888,50 @@ export default function SpaceMapView() {
             );
           })}
 
+          {/* 사각형/타원 드래그 미리보기 */}
+          {dragShapeStart && dragShapeEnd && (tool === "rect" || tool === "ellipse") && (
+            <g pointerEvents="none">
+              {tool === "rect" ? (
+                <polygon
+                  points={buildRectPoints(dragShapeStart, dragShapeEnd)
+                    .map((pt) => `${pt.x},${pt.y}`)
+                    .join(" ")}
+                  fill={areaColor}
+                  fillOpacity={0.18}
+                  stroke={areaColor}
+                  strokeWidth={0.4}
+                  strokeDasharray="0.8 0.4"
+                />
+              ) : (
+                <ellipse
+                  cx={(dragShapeStart.x + dragShapeEnd.x) / 2}
+                  cy={(dragShapeStart.y + dragShapeEnd.y) / 2}
+                  rx={Math.abs(dragShapeEnd.x - dragShapeStart.x) / 2}
+                  ry={Math.abs(dragShapeEnd.y - dragShapeStart.y) / 2}
+                  fill={areaColor}
+                  fillOpacity={0.18}
+                  stroke={areaColor}
+                  strokeWidth={0.4}
+                  strokeDasharray="0.8 0.4"
+                />
+              )}
+            </g>
+          )}
+
+          {/* 자유 그리기 미리보기 */}
+          {freehandPoints.length > 1 && tool === "freehand" && (
+            <polyline
+              points={freehandPoints.map((pt) => `${pt.x},${pt.y}`).join(" ")}
+              fill={areaColor}
+              fillOpacity={0.15}
+              stroke={areaColor}
+              strokeWidth={0.4}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              pointerEvents="none"
+            />
+          )}
+
           {/* 그리는 중 미리보기 */}
           {drawingPoints.length > 0 && (
             <g pointerEvents="none">
@@ -812,8 +981,13 @@ export default function SpaceMapView() {
             borderColor: "var(--space-border)",
           }}
         >
-          {/* 영역 도구 — 색상 선택 */}
-          {editMode && isOwner && tool === "area" && (
+          {/* 영역(다각형/사각형/타원/자유 그리기) — 색상 선택 */}
+          {editMode &&
+            isOwner &&
+            (tool === "area" ||
+              tool === "rect" ||
+              tool === "ellipse" ||
+              tool === "freehand") && (
             <div>
               <p
                 className="text-xs font-medium mb-2"
@@ -849,7 +1023,14 @@ export default function SpaceMapView() {
                 className="mt-3 text-xs"
                 style={{ color: "var(--space-fg-soft)" }}
               >
-                캔버스 클릭으로 점을 찍고, 첫 점 근처를 다시 클릭하거나 Enter로 영역을 닫아요.
+                {tool === "area" &&
+                  "캔버스를 클릭해 점을 찍고, 첫 점 근처를 다시 클릭하거나 Enter로 닫아요."}
+                {tool === "rect" &&
+                  "캔버스에서 클릭-드래그로 사각형을 그려요."}
+                {tool === "ellipse" &&
+                  "캔버스에서 클릭-드래그로 원/타원을 그려요. (정원은 같은 가로·세로)"}
+                {tool === "freehand" &&
+                  "마우스 버튼을 누른 채로 자유롭게 그려요. 떼면 그 모양으로 영역이 생성돼요."}
               </p>
             </div>
           )}

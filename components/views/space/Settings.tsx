@@ -28,14 +28,46 @@ export default function SpaceSettingsView() {
 
   async function updateSetting(key: string, value: string) {
     if (!isOwner) return;
-    await supabase()
+    // 1) 즉시 로컬 갱신 (낙관적) — 토글이 즉시 반응함
+    const before = settings;
+    const exists = before.some((s) => s.key === key);
+    setSettings((prev) =>
+      exists
+        ? prev.map((s) => (s.key === key ? { ...s, value } : s))
+        : [
+            ...prev,
+            {
+              id: `tmp-${key}`,
+              space_id: space.id,
+              key,
+              value,
+              description: null,
+              updated_at: new Date().toISOString(),
+            },
+          ]
+    );
+    // 2) DB 반영 — 행이 없을 수도 있어서 update 후 영향 행 0개면 insert
+    const sb = supabase();
+    const { data: updated, error: upErr } = await sb
       .from("garden_settings")
       .update({ value })
       .eq("space_id", space.id)
-      .eq("key", key);
-    setSettings((prev) =>
-      prev.map((s) => (s.key === key ? { ...s, value } : s))
-    );
+      .eq("key", key)
+      .select();
+    if (upErr) {
+      alert(`설정 저장 실패: ${upErr.message}`);
+      setSettings(before);
+      return;
+    }
+    if (!updated || updated.length === 0) {
+      const { error: insErr } = await sb
+        .from("garden_settings")
+        .insert({ space_id: space.id, key, value });
+      if (insErr) {
+        alert(`설정 저장 실패: ${insErr.message}`);
+        setSettings(before);
+      }
+    }
   }
   const get = (key: string) =>
     settings.find((s) => s.key === key)?.value ?? "";
