@@ -40,6 +40,7 @@ type Shape = Polygon | Line | Marker;
 
 type Tool =
   | "select"
+  | "pan"
   | "area"
   | "rect"
   | "ellipse"
@@ -52,9 +53,15 @@ type MapData = {
   polygons: Polygon[];
   lines: Line[];
   markers: Marker[];
+  bg?: string | null; // 배경 전체 칠하기 색
 };
 
-const DEFAULT_DATA: MapData = { polygons: [], lines: [], markers: [] };
+const DEFAULT_DATA: MapData = {
+  polygons: [],
+  lines: [],
+  markers: [],
+  bg: null,
+};
 
 const AREA_COLORS = [
   "#7cba3d", "#3e8a3e", "#9aa0a6", "#e8d086",
@@ -120,6 +127,15 @@ export default function SpaceMapView() {
   const [freehandPoints, setFreehandPoints] = useState<Vec[]>([]);
   const isFreehandingRef = useRef(false);
 
+  // 줌·팬 — viewBox로 SVG 표시 영역 조절 (확장 가능한 캔버스)
+  const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 100, h: 100 });
+  const isPanningRef = useRef<{
+    mouseX: number;
+    mouseY: number;
+    vbX: number;
+    vbY: number;
+  } | null>(null);
+
   // 드래그 중인 도형 정보
   const dragRef = useRef<{
     id: string;
@@ -149,6 +165,7 @@ export default function SpaceMapView() {
             polygons: Array.isArray(parsed.polygons) ? parsed.polygons : [],
             lines: Array.isArray(parsed.lines) ? parsed.lines : [],
             markers: Array.isArray(parsed.markers) ? parsed.markers : [],
+            bg: typeof parsed.bg === "string" ? parsed.bg : null,
           });
         } catch {}
       }
@@ -182,18 +199,35 @@ export default function SpaceMapView() {
   };
 
   // ───── 좌표 변환 ─────
-  const ptFromEvent = (e: React.MouseEvent | React.PointerEvent): Vec | null => {
+  // SVG 의 viewBox 가 줌/팬으로 바뀌어도 정확한 데이터 공간 좌표(0~100 범위)로 변환
+  const ptFromEvent = (
+    e: React.MouseEvent | React.WheelEvent | React.PointerEvent
+  ): Vec | null => {
     const svg = svgRef.current;
     if (!svg) return null;
-    const rect = svg.getBoundingClientRect();
-    return {
-      x: ((e.clientX - rect.left) / rect.width) * 100,
-      y: ((e.clientY - rect.top) / rect.height) * 100,
-    };
+    const ctm = svg.getScreenCTM();
+    if (!ctm) return null;
+    const pt = svg.createSVGPoint();
+    pt.x = e.clientX;
+    pt.y = e.clientY;
+    const m = pt.matrixTransform(ctm.inverse());
+    return { x: m.x, y: m.y };
   };
 
   // ───── 그리기 모드 ─────
   const onCanvasMouseDown = (e: React.MouseEvent) => {
+    // 가운데 버튼 또는 pan 도구 → 어느 모드에서든 패닝
+    if (e.button === 1 || (editMode && tool === "pan")) {
+      e.preventDefault();
+      isPanningRef.current = {
+        mouseX: e.clientX,
+        mouseY: e.clientY,
+        vbX: viewBox.x,
+        vbY: viewBox.y,
+      };
+      return;
+    }
+
     if (!editMode || !isOwner) {
       // 비편집: 선택만
       if (e.target === e.currentTarget) setSelectedId(null);
@@ -251,6 +285,20 @@ export default function SpaceMapView() {
   };
 
   const onCanvasMouseMove = (e: React.MouseEvent) => {
+    // 패닝 중
+    if (isPanningRef.current) {
+      const svg = svgRef.current;
+      if (!svg) return;
+      const rect = svg.getBoundingClientRect();
+      const scaleX = viewBox.w / rect.width;
+      const scaleY = viewBox.h / rect.height;
+      const ps = isPanningRef.current;
+      const dx = (e.clientX - ps.mouseX) * scaleX;
+      const dy = (e.clientY - ps.mouseY) * scaleY;
+      setViewBox((v) => ({ ...v, x: ps.vbX - dx, y: ps.vbY - dy }));
+      return;
+    }
+
     const pt = ptFromEvent(e);
     if (!pt) return;
 
@@ -350,6 +398,10 @@ export default function SpaceMapView() {
   };
 
   const onCanvasMouseUp = () => {
+    if (isPanningRef.current) {
+      isPanningRef.current = null;
+      return;
+    }
     if (dragRef.current) {
       dragRef.current = null;
       persist(data);
@@ -405,6 +457,46 @@ export default function SpaceMapView() {
   const onCanvasDoubleClick = () => {
     if (!editMode || tool !== "river") return;
     if (drawingPoints.length >= 2) finishDrawing();
+  };
+
+  // 휠 줌 — 마우스 포인트를 기준으로 확대·축소
+  const onCanvasWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const pt = ptFromEvent(e);
+    if (!pt) return;
+    const factor = e.deltaY > 0 ? 1.15 : 1 / 1.15;
+    const newW = Math.max(10, Math.min(400, viewBox.w * factor));
+    const newH = Math.max(10, Math.min(400, viewBox.h * factor));
+    const ratio = newW / viewBox.w;
+    setViewBox({
+      x: pt.x - (pt.x - viewBox.x) * ratio,
+      y: pt.y - (pt.y - viewBox.y) * ratio,
+      w: newW,
+      h: newH,
+    });
+  };
+
+  const zoomBy = (factor: number) => {
+    const cx = viewBox.x + viewBox.w / 2;
+    const cy = viewBox.y + viewBox.h / 2;
+    const newW = Math.max(10, Math.min(400, viewBox.w * factor));
+    const newH = Math.max(10, Math.min(400, viewBox.h * factor));
+    setViewBox({
+      x: cx - newW / 2,
+      y: cy - newH / 2,
+      w: newW,
+      h: newH,
+    });
+  };
+
+  const resetView = () => setViewBox({ x: 0, y: 0, w: 100, h: 100 });
+
+  const fillBackground = () => {
+    saveData({ ...data, bg: areaColor });
+  };
+
+  const clearBackground = () => {
+    saveData({ ...data, bg: null });
   };
 
   const finishDrawing = () => {
@@ -552,7 +644,7 @@ export default function SpaceMapView() {
 
   const clearMap = () => {
     if (!confirm("맵의 모든 영역·강·마커를 지울까요?")) return;
-    saveData({ polygons: [], lines: [], markers: [] });
+    saveData({ polygons: [], lines: [], markers: [], bg: data.bg });
     setSelectedId(null);
   };
 
@@ -591,36 +683,98 @@ export default function SpaceMapView() {
             영역을 나누고 강과 길을 그려 직접 지도를 만드세요
           </p>
         </div>
-        {isOwner && (
-          <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          {/* 줌 컨트롤 — 모두에게 노출 */}
+          <div
+            className="flex items-center gap-1 rounded-lg border px-2 py-1"
+            style={{
+              borderColor: "var(--space-border)",
+              background: "var(--space-card)",
+            }}
+            title={`줌 ${Math.round((100 / viewBox.w) * 100)}%`}
+          >
             <button
-              onClick={() => {
-                setEditMode((m) => !m);
-                setSelectedId(null);
-                cancelDrawing();
-                setTool("select");
-              }}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-white"
-              style={{
-                background: editMode ? "#e8a63a" : "var(--space-accent)",
-              }}
+              onClick={() => zoomBy(1 / 1.2)}
+              className="rounded px-2 py-1 text-xs"
+              style={{ color: "var(--space-fg-muted)" }}
+              title="확대"
             >
-              {editMode ? "✓ 편집 종료" : "✎ 편집 모드"}
+              ⊕
             </button>
-            {editMode && (
+            <button
+              onClick={() => zoomBy(1.2)}
+              className="rounded px-2 py-1 text-xs"
+              style={{ color: "var(--space-fg-muted)" }}
+              title="축소"
+            >
+              ⊖
+            </button>
+            <button
+              onClick={resetView}
+              className="rounded px-2 py-1 text-xs"
+              style={{ color: "var(--space-fg-muted)" }}
+              title="원래 위치"
+            >
+              ⤢
+            </button>
+          </div>
+          {isOwner && (
+            <>
               <button
-                onClick={clearMap}
-                className="px-3 py-2 rounded-lg text-xs border"
+                onClick={() => {
+                  setEditMode((m) => !m);
+                  setSelectedId(null);
+                  cancelDrawing();
+                  setTool("select");
+                }}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white"
                 style={{
-                  borderColor: "rgba(229,91,91,0.5)",
-                  color: "#e55b5b",
+                  background: editMode ? "#e8a63a" : "var(--space-accent)",
                 }}
               >
-                전체 지우기
+                {editMode ? "✓ 편집 종료" : "✎ 편집 모드"}
               </button>
-            )}
-          </div>
-        )}
+              {editMode && (
+                <>
+                  <button
+                    onClick={fillBackground}
+                    className="px-3 py-2 rounded-lg text-xs border"
+                    style={{
+                      borderColor: "var(--space-border)",
+                      color: "var(--space-fg-muted)",
+                    }}
+                    title={`배경 전체를 ${areaColor}로 채우기`}
+                  >
+                    🪣 전체 칠하기
+                  </button>
+                  {data.bg && (
+                    <button
+                      onClick={clearBackground}
+                      className="px-3 py-2 rounded-lg text-xs border"
+                      style={{
+                        borderColor: "var(--space-border)",
+                        color: "var(--space-fg-muted)",
+                      }}
+                      title="배경 색 제거"
+                    >
+                      배경 지우기
+                    </button>
+                  )}
+                  <button
+                    onClick={clearMap}
+                    className="px-3 py-2 rounded-lg text-xs border"
+                    style={{
+                      borderColor: "rgba(229,91,91,0.5)",
+                      color: "#e55b5b",
+                    }}
+                  >
+                    전체 지우기
+                  </button>
+                </>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* 도구 모음 */}
@@ -634,6 +788,9 @@ export default function SpaceMapView() {
         >
           <ToolBtn active={tool === "select"} onClick={() => setTool("select")}>
             ↖ 선택
+          </ToolBtn>
+          <ToolBtn active={tool === "pan"} onClick={() => setTool("pan")}>
+            🖐 이동
           </ToolBtn>
           <ToolBtn active={tool === "area"} onClick={() => setTool("area")}>
             ⬡ 영역(다각형)
@@ -691,32 +848,38 @@ export default function SpaceMapView() {
         {/* 캔버스 */}
         <svg
           ref={svgRef}
-          viewBox="0 0 100 100"
+          viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
           preserveAspectRatio="none"
           onMouseDown={onCanvasMouseDown}
           onMouseMove={onCanvasMouseMove}
           onMouseUp={onCanvasMouseUp}
           onMouseLeave={onCanvasMouseUp}
           onDoubleClick={onCanvasDoubleClick}
+          onWheel={onCanvasWheel}
+          onContextMenu={(e) => e.preventDefault()}
           className="rounded-2xl border w-full"
           style={{
             aspectRatio: "1 / 1",
             background:
+              data.bg ??
               "radial-gradient(ellipse at center, rgba(74,168,216,0.05) 0%, var(--space-card) 70%)",
             borderColor: "var(--space-border)",
-            cursor:
-              !editMode || !isOwner
+            cursor: isPanningRef.current
+              ? "grabbing"
+              : !editMode || !isOwner
                 ? "default"
-                : tool === "area" ||
-                    tool === "rect" ||
-                    tool === "ellipse" ||
-                    tool === "freehand" ||
-                    tool === "river" ||
-                    tool === "marker"
-                  ? "crosshair"
-                  : tool === "delete"
-                    ? "not-allowed"
-                    : "default",
+                : tool === "pan"
+                  ? "grab"
+                  : tool === "area" ||
+                      tool === "rect" ||
+                      tool === "ellipse" ||
+                      tool === "freehand" ||
+                      tool === "river" ||
+                      tool === "marker"
+                    ? "crosshair"
+                    : tool === "delete"
+                      ? "not-allowed"
+                      : "default",
             userSelect: "none",
             touchAction: "none",
           }}
