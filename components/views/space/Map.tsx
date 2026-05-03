@@ -5,10 +5,11 @@ import { supabase } from "@/lib/supabase";
 import { useSpace } from "@/components/space/SpaceContext";
 
 // ─────────────────────────────────────────────────────────────
-//  도트(타일) 맵 에디터
+//  도트(타일) 맵 에디터 — 도형 구역 + 페인트 + 텍스트 라벨 + 크기 조절
 // ─────────────────────────────────────────────────────────────
 
-const GRID = 32;
+const SIZE_OPTIONS = [16, 24, 32, 48, 64, 96];
+const DEFAULT_SIZE = 32;
 
 type Terrain = { id: number; name: string; color: string };
 const TERRAIN: Terrain[] = [
@@ -30,52 +31,71 @@ const TERRAIN: Terrain[] = [
   { id: 15, name: "어둠", color: "#1f1f2e" },
 ];
 
-const OBJECT_EMOJIS = [
-  "🌳", "🌲", "🌴", "🌵", "🌸", "🌺", "🌻", "🌷",
-  "🍄", "🌿", "🪴", "🌾", "🪨", "⛲", "🗿", "🏛️",
-  "🏠", "🏰", "⛩️", "🕯️", "🚪", "🛏️", "🪑",
-  "🐦", "🦌", "🦊", "🐰", "🦋", "🐝", "🐛",
-  "✨", "⭐", "🌙", "☀️", "🔥", "❄️", "💧", "💎",
-];
+type Tool = "paint" | "rect" | "circle" | "fill" | "eraser" | "text" | "select";
 
-type Marker = {
+type Pt = { x: number; y: number };
+
+type TextLabel = {
   id: string;
-  x: number; // tile col 0..GRID-1
-  y: number; // tile row 0..GRID-1
-  emoji: string;
-  label?: string;
+  x: number; // tile coordinate (float ok)
+  y: number;
+  text: string;
+  size: number; // 1.0 = base, 2.0 = bigger
+  color: string;
 };
 
-type Tool = "paint" | "fill" | "eraser" | "object" | "select";
+const TEXT_COLORS = [
+  "#1e3a5f", "#ffffff", "#e55b5b", "#e8a63a", "#4caf84", "#5b9bd5", "#8b7ec8",
+];
 
 const newId = () =>
-  `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+function resizeTiles(prev: number[], oldSize: number, newSize: number): number[] {
+  const next = new Array(newSize * newSize).fill(0);
+  const min = Math.min(oldSize, newSize);
+  for (let y = 0; y < min; y++) {
+    for (let x = 0; x < min; x++) {
+      next[y * newSize + x] = prev[y * oldSize + x] ?? 0;
+    }
+  }
+  return next;
+}
 
 export default function SpaceMapView() {
   const { space, isOwner } = useSpace();
+  const [size, setSize] = useState<number>(DEFAULT_SIZE);
   const [tiles, setTiles] = useState<number[]>(() =>
-    new Array(GRID * GRID).fill(0)
+    new Array(DEFAULT_SIZE * DEFAULT_SIZE).fill(0)
   );
-  const [markers, setMarkers] = useState<Marker[]>([]);
+  const [texts, setTexts] = useState<TextLabel[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [editMode, setEditMode] = useState(false);
   const [tool, setTool] = useState<Tool>("paint");
   const [terrainId, setTerrainId] = useState(1);
-  const [pendingEmoji, setPendingEmoji] = useState("🌳");
   const [showGrid, setShowGrid] = useState(true);
-  const [selectedMarker, setSelectedMarker] = useState<string | null>(null);
+  const [selectedTextId, setSelectedTextId] = useState<string | null>(null);
+
+  // 되돌리기 / 다시 실행 — 최근 상태 스냅샷
+  type Snap = { size: number; tiles: number[]; texts: TextLabel[] };
+  const [past, setPast] = useState<Snap[]>([]);
+  const [future, setFuture] = useState<Snap[]>([]);
+  const HISTORY_MAX = 50;
 
   const isStrokingRef = useRef(false);
-  const draggingMarkerRef = useRef<string | null>(null);
-  const lastTileRef = useRef<{ x: number; y: number } | null>(null);
+  const lastTileRef = useRef<Pt | null>(null);
+  const [dragStart, setDragStart] = useState<Pt | null>(null);
+  const [dragEnd, setDragEnd] = useState<Pt | null>(null);
+  const draggingTextRef = useRef<string | null>(null);
+
   const canvasRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let active = true;
     (async () => {
       const sb = supabase();
-      const [tRes, mRes] = await Promise.all([
+      const [tRes, txRes] = await Promise.all([
         sb
           .from("garden_settings")
           .select("*")
@@ -86,39 +106,45 @@ export default function SpaceMapView() {
           .from("garden_settings")
           .select("*")
           .eq("space_id", space.id)
-          .eq("key", "map_markers")
+          .eq("key", "map_texts")
           .maybeSingle(),
       ]);
       if (!active) return;
       if (tRes.data?.value) {
         try {
           const parsed = JSON.parse(tRes.data.value);
-          if (Array.isArray(parsed) && parsed.length === GRID * GRID) {
+          // 옛 포맷(배열만) 호환
+          if (Array.isArray(parsed)) {
+            const sq = Math.round(Math.sqrt(parsed.length));
+            const validSize = SIZE_OPTIONS.includes(sq) ? sq : DEFAULT_SIZE;
+            setSize(validSize);
             setTiles(parsed);
+          } else if (
+            parsed &&
+            typeof parsed === "object" &&
+            Array.isArray(parsed.tiles)
+          ) {
+            const sz =
+              typeof parsed.size === "number" ? parsed.size : DEFAULT_SIZE;
+            setSize(sz);
+            setTiles(parsed.tiles);
           }
         } catch {}
       }
-      if (mRes.data?.value) {
+      if (txRes.data?.value) {
         try {
-          const parsed = JSON.parse(mRes.data.value);
+          const parsed = JSON.parse(txRes.data.value);
           if (Array.isArray(parsed)) {
-            const normalized: Marker[] = parsed.map((m) => {
-              const x = typeof m.x === "number" ? m.x : 0;
-              const y = typeof m.y === "number" ? m.y : 0;
-              const isPercent = x > GRID || y > GRID; // 옛 데이터(0~100 %) 호환
-              return {
-                id: m.id ?? newId(),
-                emoji: m.emoji ?? "❓",
-                label: m.label,
-                x: isPercent
-                  ? Math.round((x / 100) * (GRID - 1))
-                  : Math.max(0, Math.min(GRID - 1, Math.round(x))),
-                y: isPercent
-                  ? Math.round((y / 100) * (GRID - 1))
-                  : Math.max(0, Math.min(GRID - 1, Math.round(y))),
-              };
-            });
-            setMarkers(normalized);
+            setTexts(
+              parsed.map((t) => ({
+                id: t.id ?? newId(),
+                x: t.x ?? 0,
+                y: t.y ?? 0,
+                text: t.text ?? "",
+                size: typeof t.size === "number" ? t.size : 1,
+                color: t.color ?? "#1e3a5f",
+              }))
+            );
           }
         } catch {}
       }
@@ -130,8 +156,9 @@ export default function SpaceMapView() {
   }, [space.id]);
 
   const persistTiles = useCallback(
-    async (next: number[]) => {
+    async (sz: number, next: number[]) => {
       const sb = supabase();
+      const value = JSON.stringify({ size: sz, tiles: next });
       const { data: existing } = await sb
         .from("garden_settings")
         .select("id")
@@ -139,15 +166,12 @@ export default function SpaceMapView() {
         .eq("key", "tilemap")
         .maybeSingle();
       if (existing) {
-        await sb
-          .from("garden_settings")
-          .update({ value: JSON.stringify(next) })
-          .eq("id", existing.id);
+        await sb.from("garden_settings").update({ value }).eq("id", existing.id);
       } else {
         await sb.from("garden_settings").insert({
           space_id: space.id,
           key: "tilemap",
-          value: JSON.stringify(next),
+          value,
           description: "도트 맵 타일",
         });
       }
@@ -155,46 +179,121 @@ export default function SpaceMapView() {
     [space.id]
   );
 
-  const persistMarkers = useCallback(
-    async (next: Marker[]) => {
+  const persistTexts = useCallback(
+    async (next: TextLabel[]) => {
       const sb = supabase();
+      const value = JSON.stringify(next);
       const { data: existing } = await sb
         .from("garden_settings")
         .select("id")
         .eq("space_id", space.id)
-        .eq("key", "map_markers")
+        .eq("key", "map_texts")
         .maybeSingle();
       if (existing) {
-        await sb
-          .from("garden_settings")
-          .update({ value: JSON.stringify(next) })
-          .eq("id", existing.id);
+        await sb.from("garden_settings").update({ value }).eq("id", existing.id);
       } else {
         await sb.from("garden_settings").insert({
           space_id: space.id,
-          key: "map_markers",
-          value: JSON.stringify(next),
-          description: "맵 마커",
+          key: "map_texts",
+          value,
+          description: "맵 텍스트 라벨",
         });
       }
     },
     [space.id]
   );
 
-  const tileAtEvent = (
-    e: React.MouseEvent
-  ): { x: number; y: number } | null => {
-    if (!canvasRef.current) return null;
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = Math.floor(((e.clientX - rect.left) / rect.width) * GRID);
-    const y = Math.floor(((e.clientY - rect.top) / rect.height) * GRID);
-    if (x < 0 || x >= GRID || y < 0 || y >= GRID) return null;
-    return { x, y };
+  // ─── 히스토리 ───
+  const pushHistory = () => {
+    const cur: Snap = { size, tiles: tiles.slice(), texts: texts.slice() };
+    setPast((p) => {
+      const next = p.length >= HISTORY_MAX ? p.slice(1) : p.slice();
+      next.push(cur);
+      return next;
+    });
+    setFuture([]);
   };
 
+  const undo = () => {
+    if (past.length === 0) return;
+    const target = past[past.length - 1];
+    const current: Snap = {
+      size,
+      tiles: tiles.slice(),
+      texts: texts.slice(),
+    };
+    setPast(past.slice(0, -1));
+    setFuture((f) => [...f, current]);
+    setSize(target.size);
+    setTiles(target.tiles);
+    setTexts(target.texts);
+    setSelectedTextId(null);
+    persistTiles(target.size, target.tiles);
+    persistTexts(target.texts);
+  };
+
+  const redo = () => {
+    if (future.length === 0) return;
+    const target = future[future.length - 1];
+    const current: Snap = {
+      size,
+      tiles: tiles.slice(),
+      texts: texts.slice(),
+    };
+    setFuture(future.slice(0, -1));
+    setPast((p) => [...p, current]);
+    setSize(target.size);
+    setTiles(target.tiles);
+    setTexts(target.texts);
+    setSelectedTextId(null);
+    persistTiles(target.size, target.tiles);
+    persistTexts(target.texts);
+  };
+
+  // 키보드: Ctrl/Cmd+Z 되돌리기, Ctrl/Cmd+Y 또는 Ctrl/Cmd+Shift+Z 다시
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA")
+      )
+        return;
+      const meta = e.ctrlKey || e.metaKey;
+      if (!meta) return;
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((key === "z" && e.shiftKey) || key === "y") {
+        e.preventDefault();
+        redo();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [past, future, tiles, texts, size]);
+
+  // ─── 좌표 변환 ───
+  const ptAtEvent = (e: React.MouseEvent): Pt | null => {
+    if (!canvasRef.current) return null;
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * size;
+    const y = ((e.clientY - rect.top) / rect.height) * size;
+    if (x < 0 || x >= size || y < 0 || y >= size) return null;
+    return { x, y };
+  };
+  const tileAtEvent = (e: React.MouseEvent): Pt | null => {
+    const p = ptAtEvent(e);
+    if (!p) return null;
+    return { x: Math.floor(p.x), y: Math.floor(p.y) };
+  };
+
+  // ─── 페인트 작업 ───
   const paintAt = (x: number, y: number, id: number) => {
     setTiles((prev) => {
-      const idx = y * GRID + x;
+      const idx = y * size + x;
       if (prev[idx] === id) return prev;
       const next = prev.slice();
       next[idx] = id;
@@ -202,127 +301,226 @@ export default function SpaceMapView() {
     });
   };
 
-  const fillFromTile = (x: number, y: number, replaceWith: number) => {
+  const fillRect = (a: Pt, b: Pt, id: number) => {
+    pushHistory();
+    const x1 = Math.max(0, Math.min(a.x, b.x));
+    const y1 = Math.max(0, Math.min(a.y, b.y));
+    const x2 = Math.min(size - 1, Math.max(a.x, b.x));
+    const y2 = Math.min(size - 1, Math.max(a.y, b.y));
     setTiles((prev) => {
-      const idx0 = y * GRID + x;
-      const target = prev[idx0];
+      const next = prev.slice();
+      for (let yy = y1; yy <= y2; yy++) {
+        for (let xx = x1; xx <= x2; xx++) {
+          next[yy * size + xx] = id;
+        }
+      }
+      persistTiles(size, next);
+      return next;
+    });
+  };
+
+  const fillEllipse = (a: Pt, b: Pt, id: number) => {
+    pushHistory();
+    const cx = (a.x + b.x) / 2 + 0.5;
+    const cy = (a.y + b.y) / 2 + 0.5;
+    const rx = Math.max(0.5, Math.abs(b.x - a.x) / 2 + 0.5);
+    const ry = Math.max(0.5, Math.abs(b.y - a.y) / 2 + 0.5);
+    setTiles((prev) => {
+      const next = prev.slice();
+      for (let yy = 0; yy < size; yy++) {
+        for (let xx = 0; xx < size; xx++) {
+          const dx = (xx + 0.5 - cx) / rx;
+          const dy = (yy + 0.5 - cy) / ry;
+          if (dx * dx + dy * dy <= 1) next[yy * size + xx] = id;
+        }
+      }
+      persistTiles(size, next);
+      return next;
+    });
+  };
+
+  const fillFromTile = (x: number, y: number, replaceWith: number) => {
+    pushHistory();
+    setTiles((prev) => {
+      const target = prev[y * size + x];
       if (target === replaceWith) return prev;
       const next = prev.slice();
       const stack: [number, number][] = [[x, y]];
       while (stack.length) {
         const [cx, cy] = stack.pop()!;
-        if (cx < 0 || cx >= GRID || cy < 0 || cy >= GRID) continue;
-        const i = cy * GRID + cx;
+        if (cx < 0 || cx >= size || cy < 0 || cy >= size) continue;
+        const i = cy * size + cx;
         if (next[i] !== target) continue;
         next[i] = replaceWith;
         stack.push([cx + 1, cy], [cx - 1, cy], [cx, cy + 1], [cx, cy - 1]);
       }
+      persistTiles(size, next);
       return next;
     });
   };
 
+  // ─── 마우스 핸들러 ───
   const onCanvasMouseDown = (e: React.MouseEvent) => {
     if (!editMode || !isOwner) return;
-    const t = tileAtEvent(e);
-    if (!t) return;
+    const p = ptAtEvent(e);
+    if (!p) return;
 
+    if (tool === "select") {
+      // 가장 가까운 텍스트 라벨 잡기
+      const hit = nearestText(p, texts, 1.5);
+      if (hit) {
+        setSelectedTextId(hit.id);
+        draggingTextRef.current = hit.id;
+        pushHistory(); // 드래그로 위치 바뀔 때를 대비해 미리 스냅샷
+      } else {
+        setSelectedTextId(null);
+      }
+      return;
+    }
+
+    if (tool === "text") {
+      const t = window.prompt("표시할 텍스트", "");
+      if (!t || !t.trim()) return;
+      pushHistory();
+      const label: TextLabel = {
+        id: newId(),
+        x: p.x,
+        y: p.y,
+        text: t.trim(),
+        size: 1.4,
+        color: "#1e3a5f",
+      };
+      const next = [...texts, label];
+      setTexts(next);
+      persistTexts(next);
+      setSelectedTextId(label.id);
+      setTool("select");
+      return;
+    }
+
+    const tile: Pt = { x: Math.floor(p.x), y: Math.floor(p.y) };
     if (tool === "paint" || tool === "eraser") {
-      paintAt(t.x, t.y, tool === "paint" ? terrainId : 0);
+      pushHistory();
+      paintAt(tile.x, tile.y, tool === "paint" ? terrainId : 0);
       isStrokingRef.current = true;
-      lastTileRef.current = t;
+      lastTileRef.current = tile;
     } else if (tool === "fill") {
-      fillFromTile(t.x, t.y, terrainId);
-    } else if (tool === "object") {
-      const existing = markers.find((m) => m.x === t.x && m.y === t.y);
-      let next: Marker[];
-      if (existing) {
-        next = markers.map((m) =>
-          m.id === existing.id ? { ...m, emoji: pendingEmoji } : m
-        );
-      } else {
-        next = [
-          ...markers,
-          { id: newId(), x: t.x, y: t.y, emoji: pendingEmoji },
-        ];
-      }
-      setMarkers(next);
-      persistMarkers(next);
-    } else if (tool === "select") {
-      const m = markers.find((mm) => mm.x === t.x && mm.y === t.y);
-      if (m) {
-        setSelectedMarker(m.id);
-        draggingMarkerRef.current = m.id;
-      } else {
-        setSelectedMarker(null);
-      }
+      fillFromTile(tile.x, tile.y, terrainId);
+    } else if (tool === "rect" || tool === "circle") {
+      setDragStart(tile);
+      setDragEnd(tile);
     }
   };
 
   const onCanvasMouseMove = (e: React.MouseEvent) => {
     if (!editMode || !isOwner) return;
-    const t = tileAtEvent(e);
-    if (!t) return;
+    const p = ptAtEvent(e);
+    if (!p) return;
 
+    if (draggingTextRef.current) {
+      const id = draggingTextRef.current;
+      setTexts((prev) =>
+        prev.map((t) => (t.id === id ? { ...t, x: p.x, y: p.y } : t))
+      );
+      return;
+    }
+
+    const tile: Pt = { x: Math.floor(p.x), y: Math.floor(p.y) };
     if (isStrokingRef.current && (tool === "paint" || tool === "eraser")) {
       const last = lastTileRef.current;
-      if (last && last.x === t.x && last.y === t.y) return;
-      paintAt(t.x, t.y, tool === "paint" ? terrainId : 0);
-      lastTileRef.current = t;
-    } else if (draggingMarkerRef.current) {
-      const id = draggingMarkerRef.current;
-      setMarkers((prev) =>
-        prev.map((m) => (m.id === id ? { ...m, x: t.x, y: t.y } : m))
-      );
+      if (last && last.x === tile.x && last.y === tile.y) return;
+      paintAt(tile.x, tile.y, tool === "paint" ? terrainId : 0);
+      lastTileRef.current = tile;
+    } else if (dragStart && (tool === "rect" || tool === "circle")) {
+      setDragEnd(tile);
     }
   };
 
   const onCanvasMouseUp = () => {
+    if (draggingTextRef.current) {
+      draggingTextRef.current = null;
+      persistTexts(texts);
+      return;
+    }
     if (isStrokingRef.current) {
       isStrokingRef.current = false;
       lastTileRef.current = null;
-      persistTiles(tiles);
+      persistTiles(size, tiles);
     }
-    if (draggingMarkerRef.current) {
-      draggingMarkerRef.current = null;
-      persistMarkers(markers);
+    if (dragStart && dragEnd && (tool === "rect" || tool === "circle")) {
+      if (tool === "rect") fillRect(dragStart, dragEnd, terrainId);
+      else fillEllipse(dragStart, dragEnd, terrainId);
+      setDragStart(null);
+      setDragEnd(null);
     }
   };
 
-  const updateSelectedMarker = (patch: Partial<Marker>) => {
-    if (!selectedMarker) return;
-    const next = markers.map((m) =>
-      m.id === selectedMarker ? { ...m, ...patch } : m
+  // ─── 텍스트 라벨 편집 ───
+  const updateSelectedText = (patch: Partial<TextLabel>) => {
+    if (!selectedTextId) return;
+    pushHistory();
+    const next = texts.map((t) =>
+      t.id === selectedTextId ? { ...t, ...patch } : t
     );
-    setMarkers(next);
-    persistMarkers(next);
+    setTexts(next);
+    persistTexts(next);
+  };
+  const removeSelectedText = () => {
+    if (!selectedTextId) return;
+    pushHistory();
+    const next = texts.filter((t) => t.id !== selectedTextId);
+    setTexts(next);
+    persistTexts(next);
+    setSelectedTextId(null);
   };
 
-  const removeSelectedMarker = () => {
-    if (!selectedMarker) return;
-    const next = markers.filter((m) => m.id !== selectedMarker);
-    setMarkers(next);
-    persistMarkers(next);
-    setSelectedMarker(null);
-  };
-
+  // ─── 캔버스 작업 ───
   const fillCanvas = async () => {
-    const filled = new Array(GRID * GRID).fill(terrainId);
+    pushHistory();
+    const filled = new Array(size * size).fill(terrainId);
     setTiles(filled);
-    await persistTiles(filled);
+    await persistTiles(size, filled);
   };
-
   const clearMap = async () => {
-    if (!confirm("타일과 마커를 모두 지울까요?")) return;
-    const empty = new Array(GRID * GRID).fill(0);
+    if (!confirm("맵을 모두 지울까요? 텍스트 라벨도 함께 사라집니다."))
+      return;
+    pushHistory();
+    const empty = new Array(size * size).fill(0);
     setTiles(empty);
-    setMarkers([]);
-    await Promise.all([persistTiles(empty), persistMarkers([])]);
-    setSelectedMarker(null);
+    setTexts([]);
+    setSelectedTextId(null);
+    await Promise.all([persistTiles(size, empty), persistTexts([])]);
   };
 
-  const selMarker = useMemo(
-    () => markers.find((m) => m.id === selectedMarker) ?? null,
-    [markers, selectedMarker]
+  // ─── 맵 크기 변경 ───
+  const changeSize = async (newSize: number) => {
+    if (newSize === size) return;
+    const isShrinking = newSize < size;
+    if (
+      isShrinking &&
+      !confirm(
+        `맵을 ${newSize}×${newSize}로 줄이면 오른쪽·아래 영역의 타일이 잘립니다. 계속할까요?`
+      )
+    ) {
+      return;
+    }
+    pushHistory();
+    const next = resizeTiles(tiles, size, newSize);
+    setSize(newSize);
+    setTiles(next);
+    // 좌표가 새 영역을 벗어난 텍스트는 안쪽으로 끌어당김
+    const newTexts = texts.map((t) => ({
+      ...t,
+      x: Math.min(newSize - 0.5, t.x),
+      y: Math.min(newSize - 0.5, t.y),
+    }));
+    setTexts(newTexts);
+    await Promise.all([persistTiles(newSize, next), persistTexts(newTexts)]);
+  };
+
+  const selectedText = useMemo(
+    () => texts.find((t) => t.id === selectedTextId) ?? null,
+    [texts, selectedTextId]
   );
 
   if (loading)
@@ -332,58 +530,92 @@ export default function SpaceMapView() {
       </div>
     );
 
-  const tilePct = 100 / GRID;
+  let previewBox: { x: number; y: number; w: number; h: number } | null = null;
+  if (dragStart && dragEnd && (tool === "rect" || tool === "circle")) {
+    const x1 = Math.min(dragStart.x, dragEnd.x);
+    const y1 = Math.min(dragStart.y, dragEnd.y);
+    const x2 = Math.max(dragStart.x, dragEnd.x);
+    const y2 = Math.max(dragStart.y, dragEnd.y);
+    previewBox = { x: x1, y: y1, w: x2 - x1 + 1, h: y2 - y1 + 1 };
+  }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div>
           <h1 className="text-2xl font-bold">🌍 정원 맵</h1>
           <p
             className="text-sm mt-1"
             style={{ color: "var(--space-fg-muted)" }}
           >
-            {GRID}×{GRID} 도트 맵 — 지형을 칠하고 객체를 배치해요
+            {size}×{size} 도트 맵 — 도형 구역 · 페인트 · 텍스트 라벨
           </p>
         </div>
-        {isOwner && (
-          <div className="flex gap-2">
-            <button
-              onClick={() => setEditMode((m) => !m)}
-              className="px-4 py-2 rounded-lg text-sm font-medium text-white"
+        <div className="flex gap-2 flex-wrap items-center">
+          {isOwner && editMode && (
+            <div
+              className="flex items-center gap-1 rounded-lg border px-2 py-1 text-xs"
               style={{
-                background: editMode ? "#e8a63a" : "var(--space-accent)",
+                borderColor: "var(--space-border)",
+                background: "var(--space-card)",
+                color: "var(--space-fg-muted)",
               }}
+              title="맵 크기"
             >
-              {editMode ? "✓ 편집 종료" : "✎ 편집 모드"}
-            </button>
-            {editMode && (
-              <>
-                <button
-                  onClick={fillCanvas}
-                  className="px-3 py-2 rounded-lg text-xs border"
-                  style={{
-                    borderColor: "var(--space-border)",
-                    color: "var(--space-fg-muted)",
-                  }}
-                  title={`전체를 ${TERRAIN[terrainId].name} 으로 채우기`}
-                >
-                  🪣 전체 채우기
-                </button>
-                <button
-                  onClick={clearMap}
-                  className="px-3 py-2 rounded-lg text-xs border"
-                  style={{
-                    borderColor: "rgba(229,91,91,0.5)",
-                    color: "#e55b5b",
-                  }}
-                >
-                  맵 비우기
-                </button>
-              </>
-            )}
-          </div>
-        )}
+              <span>맵 크기:</span>
+              <select
+                value={size}
+                onChange={(e) => changeSize(parseInt(e.target.value, 10))}
+                className="bg-transparent text-xs"
+                style={{ color: "var(--space-fg)" }}
+              >
+                {SIZE_OPTIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}×{s}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {isOwner && (
+            <>
+              <button
+                onClick={() => setEditMode((m) => !m)}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-white"
+                style={{
+                  background: editMode ? "#e8a63a" : "var(--space-accent)",
+                }}
+              >
+                {editMode ? "✓ 편집 종료" : "✎ 편집 모드"}
+              </button>
+              {editMode && (
+                <>
+                  <button
+                    onClick={fillCanvas}
+                    className="px-3 py-2 rounded-lg text-xs border"
+                    style={{
+                      borderColor: "var(--space-border)",
+                      color: "var(--space-fg-muted)",
+                    }}
+                    title={`전체를 ${TERRAIN[terrainId].name} 으로 채우기`}
+                  >
+                    🪣 전체 채우기
+                  </button>
+                  <button
+                    onClick={clearMap}
+                    className="px-3 py-2 rounded-lg text-xs border"
+                    style={{
+                      borderColor: "rgba(229,91,91,0.5)",
+                      color: "#e55b5b",
+                    }}
+                  >
+                    맵 비우기
+                  </button>
+                </>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {editMode && isOwner && (
@@ -397,14 +629,24 @@ export default function SpaceMapView() {
           <ToolBtn active={tool === "paint"} onClick={() => setTool("paint")}>
             🖌️ 페인트
           </ToolBtn>
+          <ToolBtn active={tool === "rect"} onClick={() => setTool("rect")}>
+            ▭ 사각형 구역
+          </ToolBtn>
+          <ToolBtn active={tool === "circle"} onClick={() => setTool("circle")}>
+            ◯ 원형 구역
+          </ToolBtn>
           <ToolBtn active={tool === "fill"} onClick={() => setTool("fill")}>
             🪣 채우기
           </ToolBtn>
           <ToolBtn active={tool === "eraser"} onClick={() => setTool("eraser")}>
             🧹 지우개
           </ToolBtn>
-          <ToolBtn active={tool === "object"} onClick={() => setTool("object")}>
-            ✨ 객체
+          <span
+            className="mx-1 h-5 w-px"
+            style={{ background: "var(--space-border)" }}
+          />
+          <ToolBtn active={tool === "text"} onClick={() => setTool("text")}>
+            📝 텍스트
           </ToolBtn>
           <ToolBtn active={tool === "select"} onClick={() => setTool("select")}>
             ↖ 선택
@@ -428,6 +670,30 @@ export default function SpaceMapView() {
           >
             # 격자
           </button>
+          <span
+            className="mx-1 h-5 w-px"
+            style={{ background: "var(--space-border)" }}
+          />
+          <button
+            type="button"
+            onClick={undo}
+            disabled={past.length === 0}
+            className="rounded px-2 py-1 text-xs disabled:opacity-30"
+            style={{ color: "var(--space-fg-muted)" }}
+            title="되돌리기 (Ctrl+Z)"
+          >
+            ↶ 되돌리기
+          </button>
+          <button
+            type="button"
+            onClick={redo}
+            disabled={future.length === 0}
+            className="rounded px-2 py-1 text-xs disabled:opacity-30"
+            style={{ color: "var(--space-fg-muted)" }}
+            title="다시 실행 (Ctrl+Shift+Z / Ctrl+Y)"
+          >
+            ↷ 다시
+          </button>
         </div>
       )}
 
@@ -441,14 +707,14 @@ export default function SpaceMapView() {
           className="relative overflow-hidden rounded-2xl border w-full"
           style={{
             aspectRatio: "1 / 1",
-            maxHeight: "calc(100vh - 220px)",
+            maxHeight: "calc(100vh - 240px)",
             background:
               "radial-gradient(ellipse at center, rgba(74,168,216,0.06) 0%, var(--space-card) 70%)",
             borderColor: "var(--space-border)",
             cursor:
               !editMode || !isOwner
                 ? "default"
-                : tool === "object" || tool === "fill"
+                : tool === "fill" || tool === "text"
                   ? "crosshair"
                   : tool === "eraser"
                     ? "cell"
@@ -460,7 +726,7 @@ export default function SpaceMapView() {
           }}
         >
           <svg
-            viewBox={`0 0 ${GRID} ${GRID}`}
+            viewBox={`0 0 ${size} ${size}`}
             preserveAspectRatio="none"
             shapeRendering="crispEdges"
             style={{
@@ -473,8 +739,8 @@ export default function SpaceMapView() {
           >
             {tiles.map((id, i) => {
               if (id === 0) return null;
-              const x = i % GRID;
-              const y = Math.floor(i / GRID);
+              const x = i % size;
+              const y = Math.floor(i / size);
               return (
                 <rect
                   key={i}
@@ -487,37 +753,70 @@ export default function SpaceMapView() {
               );
             })}
             {showGrid && (
-              <g stroke="rgba(0,0,0,0.06)" strokeWidth={0.02}>
-                {Array.from({ length: GRID + 1 }, (_, i) => (
-                  <line key={`v${i}`} x1={i} y1={0} x2={i} y2={GRID} />
+              <g stroke="rgba(0,0,0,0.06)" strokeWidth={Math.max(0.01, 0.6 / size)}>
+                {Array.from({ length: size + 1 }, (_, i) => (
+                  <line key={`v${i}`} x1={i} y1={0} x2={i} y2={size} />
                 ))}
-                {Array.from({ length: GRID + 1 }, (_, i) => (
-                  <line key={`h${i}`} x1={0} y1={i} x2={GRID} y2={i} />
+                {Array.from({ length: size + 1 }, (_, i) => (
+                  <line key={`h${i}`} x1={0} y1={i} x2={size} y2={i} />
                 ))}
               </g>
             )}
+            {previewBox && tool === "rect" && (
+              <rect
+                x={previewBox.x}
+                y={previewBox.y}
+                width={previewBox.w}
+                height={previewBox.h}
+                fill={TERRAIN[terrainId]?.color ?? "#888"}
+                fillOpacity={0.45}
+                stroke={TERRAIN[terrainId]?.color ?? "#888"}
+                strokeWidth={Math.max(0.05, 3 / size)}
+                strokeDasharray={`${0.4} ${0.2}`}
+              />
+            )}
+            {previewBox && tool === "circle" && (
+              <ellipse
+                cx={previewBox.x + previewBox.w / 2}
+                cy={previewBox.y + previewBox.h / 2}
+                rx={previewBox.w / 2}
+                ry={previewBox.h / 2}
+                fill={TERRAIN[terrainId]?.color ?? "#888"}
+                fillOpacity={0.45}
+                stroke={TERRAIN[terrainId]?.color ?? "#888"}
+                strokeWidth={Math.max(0.05, 3 / size)}
+                strokeDasharray={`${0.4} ${0.2}`}
+              />
+            )}
+            {/* 텍스트 라벨 */}
+            {texts.map((t) => {
+              const isSel = selectedTextId === t.id;
+              const fontSize = (size / 18) * t.size; // 맵 크기에 비례
+              return (
+                <text
+                  key={t.id}
+                  x={t.x}
+                  y={t.y}
+                  fontSize={fontSize}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontWeight={600}
+                  fill={t.color}
+                  paintOrder="stroke"
+                  stroke="rgba(255,255,255,0.85)"
+                  strokeWidth={fontSize * 0.18}
+                  style={{
+                    filter: isSel
+                      ? "drop-shadow(0 0 0.4px var(--space-accent))"
+                      : undefined,
+                    pointerEvents: "none",
+                  }}
+                >
+                  {t.text}
+                </text>
+              );
+            })}
           </svg>
-
-          {markers.map((m) => {
-            const isSel = selectedMarker === m.id;
-            return (
-              <div
-                key={m.id}
-                className="absolute -translate-x-1/2 -translate-y-1/2 select-none pointer-events-none"
-                style={{
-                  left: `${(m.x + 0.5) * tilePct}%`,
-                  top: `${(m.y + 0.5) * tilePct}%`,
-                  fontSize: "min(2.5vw, 26px)",
-                  filter: isSel
-                    ? "drop-shadow(0 0 4px var(--space-accent))"
-                    : "drop-shadow(0 1px 1px rgba(0,0,0,0.3))",
-                }}
-                title={m.label ?? m.emoji}
-              >
-                {m.emoji}
-              </div>
-            );
-          })}
         </div>
 
         <aside
@@ -527,7 +826,108 @@ export default function SpaceMapView() {
             borderColor: "var(--space-border)",
           }}
         >
-          {editMode && isOwner && (tool === "paint" || tool === "fill") && (
+          {/* 텍스트 선택됐을 때 — 편집 패널 */}
+          {tool === "select" && selectedText ? (
+            <div>
+              <p
+                className="text-xs font-medium mb-2"
+                style={{ color: "var(--space-fg-muted)" }}
+              >
+                📝 선택된 텍스트
+              </p>
+              <label
+                className="block text-xs mb-1"
+                style={{ color: "var(--space-fg-muted)" }}
+              >
+                내용
+              </label>
+              <input
+                type="text"
+                value={selectedText.text}
+                onChange={(e) => updateSelectedText({ text: e.target.value })}
+                disabled={!editMode || !isOwner}
+                className="w-full rounded border px-2 py-1 text-sm mb-2"
+                style={{
+                  background: "var(--space-bg)",
+                  borderColor: "var(--space-border)",
+                  color: "var(--space-fg)",
+                }}
+              />
+              <label
+                className="block text-xs mb-1"
+                style={{ color: "var(--space-fg-muted)" }}
+              >
+                크기 ({selectedText.size.toFixed(1)})
+              </label>
+              <input
+                type="range"
+                min={0.5}
+                max={4}
+                step={0.1}
+                value={selectedText.size}
+                onChange={(e) =>
+                  updateSelectedText({ size: parseFloat(e.target.value) })
+                }
+                disabled={!editMode || !isOwner}
+                className="w-full mb-2"
+              />
+              <p
+                className="text-xs mb-1"
+                style={{ color: "var(--space-fg-muted)" }}
+              >
+                색상
+              </p>
+              <div className="flex gap-2 flex-wrap mb-3">
+                {TEXT_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => updateSelectedText({ color: c })}
+                    disabled={!editMode || !isOwner}
+                    className="h-6 w-6 rounded-full border"
+                    style={{
+                      background: c,
+                      borderColor:
+                        selectedText.color === c
+                          ? "var(--space-accent)"
+                          : "var(--space-border)",
+                      outline:
+                        selectedText.color === c
+                          ? "2px solid var(--space-accent)"
+                          : "none",
+                    }}
+                  />
+                ))}
+                <input
+                  type="color"
+                  value={selectedText.color}
+                  onChange={(e) =>
+                    updateSelectedText({ color: e.target.value })
+                  }
+                  disabled={!editMode || !isOwner}
+                  className="h-6 w-8 cursor-pointer"
+                />
+              </div>
+              <p
+                className="text-xs mb-3"
+                style={{ color: "var(--space-fg-soft)" }}
+              >
+                위치: ({selectedText.x.toFixed(1)}, {selectedText.y.toFixed(1)})
+                · 캔버스에서 드래그로 이동
+              </p>
+              {editMode && isOwner && (
+                <button
+                  onClick={removeSelectedText}
+                  className="w-full rounded px-2 py-1 text-xs"
+                  style={{
+                    background: "rgba(229,91,91,0.15)",
+                    color: "#e55b5b",
+                  }}
+                >
+                  텍스트 삭제
+                </button>
+              )}
+            </div>
+          ) : editMode && isOwner ? (
             <div>
               <p
                 className="text-xs font-medium mb-2"
@@ -566,133 +966,51 @@ export default function SpaceMapView() {
                   );
                 })}
               </div>
-            </div>
-          )}
-
-          {editMode && isOwner && tool === "object" && (
-            <div>
               <p
-                className="text-xs font-medium mb-2"
-                style={{ color: "var(--space-fg-muted)" }}
-              >
-                객체 (선택 후 타일 클릭)
-              </p>
-              <div className="grid grid-cols-6 gap-1 max-h-72 overflow-auto">
-                {OBJECT_EMOJIS.map((em) => (
-                  <button
-                    key={em}
-                    onClick={() => setPendingEmoji(em)}
-                    className="text-xl p-1 rounded"
-                    style={
-                      pendingEmoji === em
-                        ? {
-                            background: "var(--space-accent-soft)",
-                            outline: "2px solid var(--space-accent)",
-                          }
-                        : {}
-                    }
-                  >
-                    {em}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {tool === "select" && selMarker && (
-            <div>
-              <p
-                className="text-xs font-medium mb-2"
-                style={{ color: "var(--space-fg-muted)" }}
-              >
-                ✨ 선택된 객체
-              </p>
-              <label
-                className="block text-xs mb-1"
-                style={{ color: "var(--space-fg-muted)" }}
-              >
-                이모지
-              </label>
-              <input
-                type="text"
-                value={selMarker.emoji}
-                onChange={(e) =>
-                  updateSelectedMarker({ emoji: e.target.value })
-                }
-                disabled={!editMode || !isOwner}
-                maxLength={4}
-                className="w-full rounded border px-2 py-1 text-xl text-center mb-2"
-                style={{
-                  background: "var(--space-bg)",
-                  borderColor: "var(--space-border)",
-                  color: "var(--space-fg)",
-                }}
-              />
-              <label
-                className="block text-xs mb-1"
-                style={{ color: "var(--space-fg-muted)" }}
-              >
-                이름 (선택)
-              </label>
-              <input
-                type="text"
-                value={selMarker.label ?? ""}
-                onChange={(e) =>
-                  updateSelectedMarker({ label: e.target.value })
-                }
-                disabled={!editMode || !isOwner}
-                className="w-full rounded border px-2 py-1 text-sm mb-3"
-                style={{
-                  background: "var(--space-bg)",
-                  borderColor: "var(--space-border)",
-                  color: "var(--space-fg)",
-                }}
-              />
-              <p
-                className="text-xs mb-3"
+                className="text-xs mt-3"
                 style={{ color: "var(--space-fg-soft)" }}
               >
-                위치: ({selMarker.x}, {selMarker.y}) · 드래그로 이동
+                {tool === "paint" && "🖌️ 클릭·드래그로 한 칸씩 칠합니다"}
+                {tool === "rect" &&
+                  "▭ 클릭·드래그로 사각형 구역을 한 번에 채웁니다"}
+                {tool === "circle" &&
+                  "◯ 클릭·드래그로 원/타원 구역을 채웁니다"}
+                {tool === "fill" &&
+                  "🪣 같은 색으로 이어진 영역을 한 번에 칠합니다"}
+                {tool === "eraser" && "🧹 클릭·드래그로 한 칸씩 지웁니다"}
+                {tool === "text" &&
+                  "📝 캔버스를 클릭해서 그 자리에 텍스트를 붙입니다"}
+                {tool === "select" &&
+                  "↖ 텍스트 라벨을 클릭해 선택, 드래그로 이동"}
               </p>
-              {editMode && isOwner && (
-                <button
-                  onClick={removeSelectedMarker}
-                  className="w-full rounded px-2 py-1 text-xs"
-                  style={{
-                    background: "rgba(229,91,91,0.15)",
-                    color: "#e55b5b",
-                  }}
-                >
-                  객체 삭제
-                </button>
-              )}
             </div>
-          )}
-
-          {(!editMode || !isOwner) && (
+          ) : (
             <div
-              className="text-sm text-center py-4"
+              className="text-sm text-center py-6"
               style={{ color: "var(--space-fg-soft)" }}
             >
               <p className="mb-2">
-                {markers.length}개 객체 ·{" "}
-                {tiles.filter((t) => t !== 0).length}칸 그려짐
+                {tiles.filter((t) => t !== 0).length}칸 그려짐 · 텍스트{" "}
+                {texts.length}개
               </p>
               {!editMode && isOwner && (
                 <p className="text-xs">편집 모드를 켜면 그릴 수 있어요.</p>
               )}
             </div>
           )}
-
-          {editMode && isOwner && tool === "select" && !selMarker && (
-            <p className="text-xs" style={{ color: "var(--space-fg-soft)" }}>
-              ✨ 객체 도구로 찍은 마커를 클릭해 선택하세요. 드래그로 이동, 우측에서 이모지·이름 변경.
-            </p>
-          )}
         </aside>
       </div>
     </div>
   );
+}
+
+function nearestText(p: Pt, list: TextLabel[], maxDist: number) {
+  let best: { id: string; d: number } | null = null;
+  for (const t of list) {
+    const d = Math.hypot(t.x - p.x, t.y - p.y);
+    if (d < maxDist && (!best || d < best.d)) best = { id: t.id, d };
+  }
+  return best;
 }
 
 function ToolBtn({
