@@ -332,18 +332,14 @@ export default function SpaceMapView() {
             ...prev,
             markers: prev.markers.map((m) =>
               m.id === d.id
-                ? {
-                    ...m,
-                    x: Math.max(0, Math.min(100, snap.x + dx)),
-                    y: Math.max(0, Math.min(100, snap.y + dy)),
-                  }
+                ? { ...m, x: snap.x + dx, y: snap.y + dy }
                 : m
             ),
           }));
         } else if (snap.kind === "polygon") {
           const newPoints = snap.points.map((p) => ({
-            x: Math.max(0, Math.min(100, p.x + dx)),
-            y: Math.max(0, Math.min(100, p.y + dy)),
+            x: p.x + dx,
+            y: p.y + dy,
           }));
           setData((prev) => ({
             ...prev,
@@ -353,8 +349,8 @@ export default function SpaceMapView() {
           }));
         } else if (snap.kind === "line") {
           const newPoints = snap.points.map((p) => ({
-            x: Math.max(0, Math.min(100, p.x + dx)),
-            y: Math.max(0, Math.min(100, p.y + dy)),
+            x: p.x + dx,
+            y: p.y + dy,
           }));
           setData((prev) => ({
             ...prev,
@@ -364,17 +360,12 @@ export default function SpaceMapView() {
           }));
         }
       } else if (d.type === "vertex" && typeof d.vertexIndex === "number") {
-        // 꼭짓점 드래그
+        // 꼭짓점 드래그 (좌표 무제한 — 줌 아웃해서 화면 밖으로도 이동 가능)
         const snap = d.startSnapshot;
         if (snap.kind === "polygon" || snap.kind === "line") {
           const idx = d.vertexIndex;
           const newPoints = snap.points.map((p, i) =>
-            i === idx
-              ? {
-                  x: Math.max(0, Math.min(100, pt.x)),
-                  y: Math.max(0, Math.min(100, pt.y)),
-                }
-              : p
+            i === idx ? { x: pt.x, y: pt.y } : p
           );
           setData((prev) => {
             if (snap.kind === "polygon") {
@@ -860,6 +851,7 @@ export default function SpaceMapView() {
           className="rounded-2xl border w-full"
           style={{
             aspectRatio: "1 / 1",
+            maxHeight: "calc(100vh - 200px)",
             background:
               data.bg ??
               "radial-gradient(ellipse at center, rgba(74,168,216,0.05) 0%, var(--space-card) 70%)",
@@ -900,12 +892,25 @@ export default function SpaceMapView() {
               />
             </pattern>
           </defs>
+          {/* 격자 — 줌·팬에 따라 보이는 영역 전체를 덮도록 viewBox에 맞춤 */}
           <rect
-            x="0"
-            y="0"
-            width="100"
-            height="100"
+            x={viewBox.x - viewBox.w}
+            y={viewBox.y - viewBox.h}
+            width={viewBox.w * 3}
+            height={viewBox.h * 3}
             fill="url(#map-grid)"
+            pointerEvents="none"
+          />
+          {/* 원래 0~100 데이터 영역 표시 */}
+          <rect
+            x={0}
+            y={0}
+            width={100}
+            height={100}
+            fill="none"
+            stroke="rgba(74,168,216,0.2)"
+            strokeWidth={0.15}
+            strokeDasharray="0.6 0.4"
             pointerEvents="none"
           />
 
