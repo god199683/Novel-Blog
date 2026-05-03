@@ -1,126 +1,221 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  supabase,
-  type Byproduct,
-  type Zone,
-  type Creature,
-  type Grade,
-} from "@/lib/supabase";
-import GradeBadge from "@/components/space/GradeBadge";
+import { useEffect, useMemo, useState } from "react";
+import { supabase, type Byproduct, type Creature } from "@/lib/supabase";
 import { useSpace } from "@/components/space/SpaceContext";
 
-const GRADES: Grade[] = ["F", "E", "D", "C", "B", "A", "S", "SS", "SSS", "Ex"];
-const CATEGORIES = [
-  "약재", "광물", "식재료", "마법재료", "영약", "씨앗", "가죽/깃털", "기타",
-];
+type Item = Byproduct & { creature_ids: string[] };
 
 export default function SpaceByproductsView() {
   const { space, isOwner } = useSpace();
-  const [items, setItems] = useState<Byproduct[]>([]);
-  const [zones, setZones] = useState<Zone[]>([]);
+  const [items, setItems] = useState<Item[]>([]);
   const [creatures, setCreatures] = useState<Creature[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // 폼 상태
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    name: "",
-    source_creature_id: "",
-    source_zone_id: "",
-    grade: "F" as Grade,
-    quantity: 1,
-    category: "기타",
-    description: "",
-  });
+  const [name, setName] = useState("");
+  const [selectedCreatureIds, setSelectedCreatureIds] = useState<Set<string>>(
+    new Set()
+  );
+  const [creatureQuery, setCreatureQuery] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    Promise.all([
-      supabase()
-        .from("byproducts")
-        .select("*")
-        .eq("space_id", space.id)
-        .order("grade", { ascending: false }),
-      supabase()
-        .from("zones")
-        .select("id,name,icon,space_id")
-        .eq("space_id", space.id),
-      supabase()
-        .from("creatures")
-        .select("id,name,space_id")
-        .eq("space_id", space.id),
-    ]).then(([bRes, zRes, cRes]) => {
+    (async () => {
+      const sb = supabase();
+      const [bRes, cRes] = await Promise.all([
+        sb
+          .from("byproducts")
+          .select("*")
+          .eq("space_id", space.id)
+          .order("created_at", { ascending: false }),
+        sb
+          .from("creatures")
+          .select("*")
+          .eq("space_id", space.id)
+          .order("name"),
+      ]);
       if (!active) return;
-      setItems((bRes.data ?? []) as Byproduct[]);
-      setZones((zRes.data ?? []) as Zone[]);
-      setCreatures((cRes.data ?? []) as Creature[]);
+      const byproductRows = (bRes.data ?? []) as Byproduct[];
+      const creatureRows = (cRes.data ?? []) as Creature[];
+      setCreatures(creatureRows);
+
+      // 연결 테이블에서 byproduct_id → creature_ids[]
+      const ids = byproductRows.map((b) => b.id);
+      let linkRows: { byproduct_id: string; creature_id: string }[] = [];
+      if (ids.length > 0) {
+        const { data: links } = await sb
+          .from("byproduct_creatures")
+          .select("byproduct_id,creature_id")
+          .in("byproduct_id", ids);
+        linkRows = links ?? [];
+      }
+      const byBp = new Map<string, string[]>();
+      for (const l of linkRows) {
+        if (!byBp.has(l.byproduct_id)) byBp.set(l.byproduct_id, []);
+        byBp.get(l.byproduct_id)!.push(l.creature_id);
+      }
+      if (!active) return;
+      setItems(
+        byproductRows.map((b) => ({
+          ...b,
+          creature_ids: byBp.get(b.id) ?? [],
+        }))
+      );
       setLoading(false);
-    });
+    })();
     return () => {
       active = false;
     };
   }, [space.id]);
 
-  async function fetchItems() {
-    const { data } = await supabase()
-      .from("byproducts")
-      .select("*")
-      .eq("space_id", space.id)
-      .order("grade", { ascending: false });
-    setItems((data ?? []) as Byproduct[]);
-  }
+  const creatureMap = useMemo(() => {
+    const m = new Map<string, Creature>();
+    for (const c of creatures) m.set(c.id, c);
+    return m;
+  }, [creatures]);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const payload = {
-      ...form,
-      source_creature_id: form.source_creature_id || null,
-      source_zone_id: form.source_zone_id || null,
-    };
-    const sb = supabase();
-    if (editingId) {
-      await sb.from("byproducts").update(payload).eq("id", editingId);
-    } else {
-      await sb.from("byproducts").insert({ ...payload, space_id: space.id });
-    }
-    resetForm();
-    fetchItems();
-  }
+  const filteredCreatures = useMemo(() => {
+    const q = creatureQuery.trim();
+    if (!q) return creatures;
+    return creatures.filter((c) =>
+      c.name.toLowerCase().includes(q.toLowerCase())
+    );
+  }, [creatures, creatureQuery]);
 
-  async function handleDelete(id: string) {
-    if (!confirm("삭제하시겠습니까?")) return;
-    await supabase().from("byproducts").delete().eq("id", id);
-    fetchItems();
-  }
-
-  function startEdit(b: Byproduct) {
-    setForm({
-      name: b.name,
-      source_creature_id: b.source_creature_id ?? "",
-      source_zone_id: b.source_zone_id ?? "",
-      grade: b.grade,
-      quantity: b.quantity,
-      category: b.category,
-      description: b.description ?? "",
-    });
-    setEditingId(b.id);
-    setShowForm(true);
-  }
-
-  function resetForm() {
-    setForm({
-      name: "",
-      source_creature_id: "",
-      source_zone_id: "",
-      grade: "F",
-      quantity: 1,
-      category: "기타",
-      description: "",
-    });
+  const resetForm = () => {
+    setName("");
+    setSelectedCreatureIds(new Set());
+    setCreatureQuery("");
     setEditingId(null);
+    setError(null);
+  };
+
+  const startNew = () => {
+    resetForm();
+    setShowForm(true);
+  };
+
+  const startEdit = (item: Item) => {
+    setName(item.name);
+    setSelectedCreatureIds(new Set(item.creature_ids));
+    setEditingId(item.id);
+    setShowForm(true);
+    setError(null);
+  };
+
+  const cancel = () => {
+    resetForm();
     setShowForm(false);
-  }
+  };
+
+  const toggleCreature = (id: string) => {
+    setSelectedCreatureIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    if (!name.trim()) {
+      setError("이름을 입력해 주세요");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    const sb = supabase();
+    const ids = Array.from(selectedCreatureIds);
+
+    if (editingId) {
+      // 이름 갱신
+      const { error: upErr } = await sb
+        .from("byproducts")
+        .update({ name: name.trim() })
+        .eq("id", editingId);
+      if (upErr) {
+        setSaving(false);
+        setError(upErr.message);
+        return;
+      }
+      // 연결 동기화 — 전체 삭제 후 재삽입 (간단/안전)
+      await sb
+        .from("byproduct_creatures")
+        .delete()
+        .eq("byproduct_id", editingId);
+      if (ids.length > 0) {
+        const rows = ids.map((cid) => ({
+          byproduct_id: editingId,
+          creature_id: cid,
+        }));
+        const { error: linkErr } = await sb
+          .from("byproduct_creatures")
+          .insert(rows);
+        if (linkErr) {
+          setSaving(false);
+          setError(linkErr.message);
+          return;
+        }
+      }
+      setItems((cur) =>
+        cur.map((it) =>
+          it.id === editingId
+            ? { ...it, name: name.trim(), creature_ids: ids }
+            : it
+        )
+      );
+    } else {
+      // 새로 만들기 — name 외 컬럼은 기본값 사용
+      const { data, error: insErr } = await sb
+        .from("byproducts")
+        .insert({
+          space_id: space.id,
+          name: name.trim(),
+        })
+        .select()
+        .single();
+      if (insErr || !data) {
+        setSaving(false);
+        setError(insErr?.message ?? "저장 실패");
+        return;
+      }
+      const created = data as Byproduct;
+      if (ids.length > 0) {
+        const rows = ids.map((cid) => ({
+          byproduct_id: created.id,
+          creature_id: cid,
+        }));
+        const { error: linkErr } = await sb
+          .from("byproduct_creatures")
+          .insert(rows);
+        if (linkErr) {
+          setSaving(false);
+          setError(linkErr.message);
+          return;
+        }
+      }
+      setItems((cur) => [{ ...created, creature_ids: ids }, ...cur]);
+    }
+
+    setSaving(false);
+    resetForm();
+    setShowForm(false);
+  };
+
+  const remove = async (id: string) => {
+    if (!confirm("이 부산물을 삭제할까요?")) return;
+    const { error } = await supabase().from("byproducts").delete().eq("id", id);
+    if (error) {
+      alert(error.message);
+      return;
+    }
+    setItems((cur) => cur.filter((it) => it.id !== id));
+  };
 
   if (loading)
     return (
@@ -129,279 +224,290 @@ export default function SpaceByproductsView() {
       </div>
     );
 
-  const inputStyle = {
-    background: "var(--space-bg)",
-    borderColor: "var(--space-border)",
-    color: "var(--space-fg)",
-  };
-
   return (
     <div>
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">💎 부산물 / 채집품</h1>
-          <p className="text-sm mt-1" style={{ color: "var(--space-fg-muted)" }}>
-            정원에서 얻은 부산물과 채집품 관리 (Ex급까지 등급 상승 가능)
+          <h1 className="text-2xl font-bold">💎 부산물/채집품</h1>
+          <p
+            className="text-sm mt-1"
+            style={{ color: "var(--space-fg-muted)" }}
+          >
+            등록된 동식물에서 얻을 수 있는 부산물·채집품
           </p>
         </div>
-        {isOwner && (
+        {isOwner && !showForm && (
           <button
-            onClick={() => {
-              resetForm();
-              setShowForm(!showForm);
-            }}
+            onClick={startNew}
             className="px-4 py-2 rounded-lg text-sm font-medium text-white"
             style={{ background: "var(--space-accent)" }}
           >
-            {showForm ? "취소" : "+ 아이템 추가"}
+            + 새 부산물
           </button>
         )}
       </div>
 
-      {showForm && isOwner && (
-        <form
-          onSubmit={handleSubmit}
+      {/* 입력 폼 */}
+      {isOwner && showForm && (
+        <div
           className="rounded-xl p-6 border mb-6 space-y-4"
           style={{
             background: "var(--space-card)",
             borderColor: "var(--space-border)",
           }}
         >
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Field label="이름">
+          <h2 className="text-lg font-semibold">
+            {editingId ? "부산물 수정" : "새 부산물 추가"}
+          </h2>
+
+          <div>
+            <label
+              className="block text-xs mb-1"
+              style={{ color: "var(--space-fg-muted)" }}
+            >
+              이름
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+              placeholder="예: 세계수의 잎"
+              className="w-full rounded border px-3 py-2 text-sm"
+              style={{
+                background: "var(--space-bg)",
+                borderColor: "var(--space-border)",
+                color: "var(--space-fg)",
+              }}
+            />
+          </div>
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label
+                className="text-xs"
+                style={{ color: "var(--space-fg-muted)" }}
+              >
+                연결된 동식물 ({selectedCreatureIds.size}개 선택)
+              </label>
               <input
                 type="text"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className="w-full rounded-lg px-3 py-2 text-sm border"
-                style={inputStyle}
-                required
-              />
-            </Field>
-            <Field label="카테고리">
-              <select
-                value={form.category}
-                onChange={(e) =>
-                  setForm({ ...form, category: e.target.value })
-                }
-                className="w-full rounded-lg px-3 py-2 text-sm border"
-                style={inputStyle}
-              >
-                {CATEGORIES.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="등급">
-              <select
-                value={form.grade}
-                onChange={(e) =>
-                  setForm({ ...form, grade: e.target.value as Grade })
-                }
-                className="w-full rounded-lg px-3 py-2 text-sm border"
-                style={inputStyle}
-              >
-                {GRADES.map((g) => (
-                  <option key={g} value={g}>
-                    {g}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="수량">
-              <input
-                type="number"
-                min={0}
-                value={form.quantity}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    quantity: parseInt(e.target.value, 10) || 0,
-                  })
-                }
-                className="w-full rounded-lg px-3 py-2 text-sm border"
-                style={inputStyle}
-              />
-            </Field>
-            <Field label="원천 동식물">
-              <select
-                value={form.source_creature_id}
-                onChange={(e) =>
-                  setForm({ ...form, source_creature_id: e.target.value })
-                }
-                className="w-full rounded-lg px-3 py-2 text-sm border"
-                style={inputStyle}
-              >
-                <option value="">없음</option>
-                {creatures.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="원천 구역">
-              <select
-                value={form.source_zone_id}
-                onChange={(e) =>
-                  setForm({ ...form, source_zone_id: e.target.value })
-                }
-                className="w-full rounded-lg px-3 py-2 text-sm border"
-                style={inputStyle}
-              >
-                <option value="">없음</option>
-                {zones.map((z) => (
-                  <option key={z.id} value={z.id}>
-                    {z.icon} {z.name}
-                  </option>
-                ))}
-              </select>
-            </Field>
-          </div>
-          <Field label="설명">
-            <textarea
-              value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-              className="w-full rounded-lg px-3 py-2 text-sm h-20 resize-none border"
-              style={inputStyle}
-            />
-          </Field>
-          <button
-            type="submit"
-            className="px-6 py-2 rounded-lg text-sm font-medium text-white"
-            style={{ background: "var(--space-accent)" }}
-          >
-            {editingId ? "수정" : "추가"}
-          </button>
-        </form>
-      )}
-
-      <div
-        className="rounded-xl border overflow-hidden"
-        style={{
-          background: "var(--space-card)",
-          borderColor: "var(--space-border)",
-        }}
-      >
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr
+                value={creatureQuery}
+                onChange={(e) => setCreatureQuery(e.target.value)}
+                placeholder="이름으로 찾기"
+                className="rounded border px-2 py-1 text-xs w-40"
                 style={{
-                  color: "var(--space-fg-muted)",
+                  background: "var(--space-bg)",
+                  borderColor: "var(--space-border)",
+                  color: "var(--space-fg)",
+                }}
+              />
+            </div>
+            {creatures.length === 0 ? (
+              <p
+                className="text-xs py-3 px-2"
+                style={{ color: "var(--space-fg-soft)" }}
+              >
+                먼저 <strong>동식물 관리</strong>에서 동식물을 등록해 주세요.
+              </p>
+            ) : (
+              <div
+                className="rounded border max-h-72 overflow-auto"
+                style={{
+                  borderColor: "var(--space-border)",
                   background: "var(--space-bg)",
                 }}
               >
-                <th className="text-left py-3 px-4">이름</th>
-                <th className="text-left py-3 px-4">카테고리</th>
-                <th className="text-left py-3 px-4">등급</th>
-                <th className="text-left py-3 px-4">수량</th>
-                <th className="text-left py-3 px-4">원천</th>
-                {isOwner && <th className="text-left py-3 px-4">관리</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((b) => {
-                const creature = creatures.find(
-                  (c) => c.id === b.source_creature_id
-                );
-                const zone = zones.find((z) => z.id === b.source_zone_id);
-                return (
-                  <tr
-                    key={b.id}
-                    className="border-t"
-                    style={{ borderColor: "var(--space-border)" }}
+                {filteredCreatures.length === 0 ? (
+                  <p
+                    className="text-xs px-3 py-3"
+                    style={{ color: "var(--space-fg-soft)" }}
                   >
-                    <td className="py-3 px-4 font-medium">{b.name}</td>
-                    <td
-                      className="py-3 px-4"
-                      style={{ color: "var(--space-fg-muted)" }}
-                    >
-                      {b.category}
-                    </td>
-                    <td className="py-3 px-4">
-                      <GradeBadge grade={b.grade} />
-                    </td>
-                    <td className="py-3 px-4">{b.quantity}</td>
-                    <td
-                      className="py-3 px-4 text-xs"
-                      style={{ color: "var(--space-fg-muted)" }}
-                    >
-                      {creature && <span>{creature.name}</span>}
-                      {creature && zone && <span> · </span>}
-                      {zone && (
-                        <span>
-                          {zone.icon} {zone.name}
-                        </span>
-                      )}
-                      {!creature && !zone && "-"}
-                    </td>
-                    {isOwner && (
-                      <td className="py-3 px-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => startEdit(b)}
-                            className="px-2 py-1 text-xs rounded"
-                            style={{
-                              background: "rgba(91,155,213,0.18)",
-                              color: "#5b9bd5",
-                            }}
+                    검색 결과가 없어요
+                  </p>
+                ) : (
+                  <ul>
+                    {filteredCreatures.map((c) => {
+                      const checked = selectedCreatureIds.has(c.id);
+                      return (
+                        <li
+                          key={c.id}
+                          className="border-b last:border-b-0"
+                          style={{ borderColor: "var(--space-border)" }}
+                        >
+                          <label
+                            className="flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors"
+                            style={
+                              checked
+                                ? { background: "var(--space-accent-soft)" }
+                                : {}
+                            }
                           >
-                            수정
-                          </button>
-                          <button
-                            onClick={() => handleDelete(b.id)}
-                            className="px-2 py-1 text-xs rounded"
-                            style={{
-                              background: "rgba(229,91,91,0.15)",
-                              color: "#e55b5b",
-                            }}
-                          >
-                            삭제
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-        {items.length === 0 && (
-          <div
-            className="text-center py-16"
-            style={{ color: "var(--space-fg-soft)" }}
-          >
-            <span className="text-4xl block mb-4">💎</span>
-            <p>등록된 부산물이 없습니다</p>
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleCreature(c.id)}
+                              className="h-4 w-4"
+                              style={{ accentColor: "var(--space-accent)" }}
+                            />
+                            <span
+                              className="text-sm"
+                              style={{ color: "var(--space-fg)" }}
+                            >
+                              {c.type === "plant"
+                                ? "🌱"
+                                : c.type === "animal"
+                                  ? "🦊"
+                                  : c.type === "spirit"
+                                    ? "✨"
+                                    : "🔮"}{" "}
+                              {c.name}
+                            </span>
+                            <span
+                              className="ml-auto text-xs"
+                              style={{ color: "var(--space-fg-soft)" }}
+                            >
+                              {c.grade}급
+                            </span>
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label
-        className="block text-sm mb-1"
-        style={{ color: "var(--space-fg-muted)" }}
-      >
-        {label}
-      </label>
-      {children}
+          {error && <p className="text-sm text-red-600">{error}</p>}
+
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={cancel}
+              disabled={saving}
+              className="px-4 py-2 rounded-lg text-sm border"
+              style={{
+                borderColor: "var(--space-border)",
+                color: "var(--space-fg-muted)",
+              }}
+            >
+              취소
+            </button>
+            <button
+              onClick={save}
+              disabled={saving}
+              className="px-5 py-2 rounded-lg text-sm font-medium text-white disabled:opacity-50"
+              style={{ background: "var(--space-accent)" }}
+            >
+              {saving ? "저장 중..." : "저장"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 목록 */}
+      {items.length === 0 ? (
+        <div
+          className="rounded-xl border border-dashed p-10 text-center text-sm"
+          style={{
+            borderColor: "var(--space-border)",
+            color: "var(--space-fg-muted)",
+          }}
+        >
+          아직 등록된 부산물이 없어요.
+          {isOwner && " 위의 '+ 새 부산물'로 추가하세요."}
+        </div>
+      ) : (
+        <ul className="space-y-3">
+          {items.map((item) => (
+            <li
+              key={item.id}
+              className="rounded-xl border p-5 card-hover"
+              style={{
+                background: "var(--space-card)",
+                borderColor: "var(--space-border)",
+              }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-lg font-semibold flex items-center gap-2">
+                    💎 {item.name}
+                  </h3>
+                  {item.creature_ids.length > 0 ? (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {item.creature_ids.map((cid) => {
+                        const c = creatureMap.get(cid);
+                        if (!c)
+                          return (
+                            <span
+                              key={cid}
+                              className="rounded-full px-2 py-1 text-xs"
+                              style={{
+                                background: "var(--space-bg)",
+                                color: "var(--space-fg-soft)",
+                              }}
+                            >
+                              (삭제된 개체)
+                            </span>
+                          );
+                        return (
+                          <span
+                            key={cid}
+                            className="rounded-full px-2.5 py-1 text-xs"
+                            style={{
+                              background: "var(--space-accent-soft)",
+                              color: "var(--space-accent-dim)",
+                            }}
+                          >
+                            {c.type === "plant"
+                              ? "🌱"
+                              : c.type === "animal"
+                                ? "🦊"
+                                : c.type === "spirit"
+                                  ? "✨"
+                                  : "🔮"}{" "}
+                            {c.name}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p
+                      className="mt-2 text-xs"
+                      style={{ color: "var(--space-fg-soft)" }}
+                    >
+                      연결된 동식물 없음
+                    </p>
+                  )}
+                </div>
+                {isOwner && (
+                  <div className="flex flex-col gap-1">
+                    <button
+                      onClick={() => startEdit(item)}
+                      className="rounded px-3 py-1 text-xs border"
+                      style={{
+                        borderColor: "var(--space-border)",
+                        color: "var(--space-fg-muted)",
+                      }}
+                    >
+                      수정
+                    </button>
+                    <button
+                      onClick={() => remove(item.id)}
+                      className="rounded px-3 py-1 text-xs"
+                      style={{
+                        color: "#e55b5b",
+                      }}
+                    >
+                      삭제
+                    </button>
+                  </div>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
