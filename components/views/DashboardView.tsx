@@ -84,51 +84,98 @@ export default function DashboardView() {
     });
   };
 
-  const exportPostAsHtml = (p: Post) => {
-    const html = `<!DOCTYPE html>
-<html lang="ko">
-<head>
-<meta charset="UTF-8">
-<title>${escapeHtml(p.title)}</title>
-<style>
-  body { font-family: 'Pretendard', system-ui, sans-serif; max-width: 720px; margin: 2em auto; padding: 0 1em; line-height: 1.85; color: #0f172a; }
-  h1 { border-bottom: 2px solid #c7ddf5; padding-bottom: .5em; margin-bottom: 1em; }
-  .meta { color: #64748b; font-size: 13px; margin-bottom: 2em; }
-  img { max-width: 100%; height: auto; border-radius: 6px; }
-  blockquote { border-left: 3px solid #c7ddf5; padding-left: 1em; color: #475569; font-style: italic; }
-  pre { background: #f1f5f9; padding: 1em; border-radius: 6px; overflow-x: auto; }
-  code { background: #f1f5f9; padding: 0.1em 0.3em; border-radius: 3px; font-size: 0.9em; }
-</style>
-</head>
-<body>
-<h1>${escapeHtml(p.title)}</h1>
-<p class="meta">${p.kind === "material" ? "자료 · " : ""}${p.created_at.slice(0, 10)}${
-      p.category ? ` · ${escapeHtml(p.category)}` : ""
-    }</p>
-${p.content || ""}
-</body>
-</html>`;
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${sanitizeFilename(p.title || "글")}.html`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  // HTML 본문 → 단락 텍스트 배열 (단락 단위로 줄나눔)
+  const htmlToParagraphs = (html: string): string[] => {
+    if (!html) return [];
+    // <br> 줄바꿈 보존, 단락성 태그를 \n\n 으로 분리
+    const normalized = html
+      .replace(/<\s*br\s*\/?\s*>/gi, "\n")
+      .replace(/<\s*\/(p|div|h[1-6]|li|blockquote|pre)\s*>/gi, "\n\n")
+      .replace(/<\s*li[^>]*>/gi, "• ")
+      .replace(/<[^>]+>/g, "");
+    return normalized
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .split(/\n\n+/)
+      .map((s) => s.replace(/\n/g, " ").trim())
+      .filter((s) => s.length > 0);
   };
 
-  const exportPicked = async () => {
+  const exportPostAsTxt = (p: Post) => {
+    const paragraphs = htmlToParagraphs(p.content);
+    const meta = [
+      p.kind === "material" ? "자료" : null,
+      p.created_at.slice(0, 10),
+      p.category,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const text = [p.title, meta, "", ...paragraphs].join("\r\n");
+    const blob = new Blob([`﻿${text}`], {
+      type: "text/plain;charset=utf-8",
+    });
+    triggerDownload(blob, `${sanitizeFilename(p.title || "글")}.txt`);
+  };
+
+  const exportPostAsDocx = async (p: Post) => {
+    const docx = await import("docx");
+    const { Document, Packer, Paragraph, TextRun, HeadingLevel } = docx;
+    const paragraphs = htmlToParagraphs(p.content);
+    const meta = [
+      p.kind === "material" ? "자료" : null,
+      p.created_at.slice(0, 10),
+      p.category,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    const children = [
+      new Paragraph({
+        text: p.title,
+        heading: HeadingLevel.HEADING_1,
+      }),
+      ...(meta
+        ? [
+            new Paragraph({
+              children: [
+                new TextRun({ text: meta, italics: true, color: "64748B" }),
+              ],
+            }),
+          ]
+        : []),
+      new Paragraph({}),
+      ...paragraphs.map(
+        (t) =>
+          new Paragraph({
+            children: [new TextRun(t)],
+          })
+      ),
+    ];
+    const doc = new Document({
+      sections: [{ children }],
+      creator: "Novel Blog",
+      title: p.title,
+    });
+    const blob = await Packer.toBlob(doc);
+    triggerDownload(blob, `${sanitizeFilename(p.title || "글")}.docx`);
+  };
+
+  const exportPicked = async (format: "txt" | "docx") => {
     if (picked.size === 0) return;
     setExporting(true);
     try {
       const list = rows.filter((p) => picked.has(p.id));
       for (const p of list) {
-        exportPostAsHtml(p);
+        if (format === "txt") exportPostAsTxt(p);
+        else await exportPostAsDocx(p);
         // 브라우저 동시 다운로드 차단 회피
         await new Promise((r) => setTimeout(r, 250));
       }
+    } catch (err) {
+      alert(`내보내기 오류: ${err instanceof Error ? err.message : err}`);
     } finally {
       setExporting(false);
     }
@@ -147,18 +194,29 @@ ${p.content || ""}
             </Link>
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap items-center">
           {picked.size > 0 && (
             <>
+              <span className="text-xs text-slate-500">
+                {exporting
+                  ? "내보내는 중..."
+                  : `${picked.size}편 선택`}
+              </span>
               <button
                 type="button"
-                onClick={exportPicked}
+                onClick={() => exportPicked("txt")}
                 disabled={exporting}
                 className="rounded-full bg-brand-light px-3 py-2 text-sm font-medium text-brand-dark hover:opacity-90 disabled:opacity-60"
               >
-                {exporting
-                  ? "내보내는 중..."
-                  : `📥 선택 ${picked.size}편 내보내기`}
+                📄 .txt 내보내기
+              </button>
+              <button
+                type="button"
+                onClick={() => exportPicked("docx")}
+                disabled={exporting}
+                className="rounded-full bg-brand-light px-3 py-2 text-sm font-medium text-brand-dark hover:opacity-90 disabled:opacity-60"
+              >
+                📘 .docx 내보내기
               </button>
               <button
                 type="button"
@@ -313,15 +371,6 @@ ${p.content || ""}
   );
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
 function sanitizeFilename(name: string): string {
   return (
     name
@@ -329,4 +378,15 @@ function sanitizeFilename(name: string): string {
       .replace(/\s+/g, " ")
       .trim() || "글"
   );
+}
+
+function triggerDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

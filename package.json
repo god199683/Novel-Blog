@@ -20,6 +20,7 @@
     "@tiptap/react": "^2.10.3",
     "@tiptap/starter-kit": "^2.10.3",
     "@types/react-router-dom": "^5.3.3",
+    "docx": "^9.6.1",
     "nanoid": "^5.0.9",
     "next": "^15.1.6",
     "react": "^19.0.0",
