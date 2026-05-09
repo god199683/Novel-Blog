@@ -192,10 +192,6 @@ export default function SpaceMapView() {
   const [past, setPast] = useState<Snap[]>([]);
   const [future, setFuture] = useState<Snap[]>([]);
 
-  // 내보내기 — 체크된 슬라이드 + 메뉴
-  const [exportPicks, setExportPicks] = useState<Set<string>>(new Set());
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
-  const [exporting, setExporting] = useState(false);
 
   const svgRef = useRef<SVGSVGElement | null>(null);
 
@@ -690,112 +686,6 @@ export default function SpaceMapView() {
     setSelectedId(null);
   }, [current]);
 
-  // ─── 내보내기 ───
-  const togglePick = (id: string) => {
-    setExportPicks((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const exportSlideAsPNG = async (slide: Slide) => {
-    const { renderToStaticMarkup } = await import("react-dom/server");
-    const innerSvg = renderToStaticMarkup(
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox={`0 0 ${CANVAS_W} ${CANVAS_H}`}
-        width={CANVAS_W}
-        height={CANVAS_H}
-      >
-        <defs>
-          <marker
-            id="arrowhead"
-            markerWidth="10"
-            markerHeight="10"
-            refX="8"
-            refY="3.5"
-            orient="auto"
-          >
-            <polygon points="0 0, 10 3.5, 0 7" fill="currentColor" />
-          </marker>
-        </defs>
-        <rect x={0} y={0} width={CANVAS_W} height={CANVAS_H} fill={slide.bg} />
-        {[...slide.shapes]
-          .sort((a, b) => a.z - b.z)
-          .map((s) => (
-            <ShapeNode
-              key={s.id}
-              shape={s}
-              selected={false}
-              onMouseDown={() => {}}
-            />
-          ))}
-      </svg>
-    );
-
-    const svgBlob = new Blob([innerSvg], {
-      type: "image/svg+xml;charset=utf-8",
-    });
-    const svgUrl = URL.createObjectURL(svgBlob);
-
-    await new Promise<void>((resolve, reject) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        canvas.width = CANVAS_W;
-        canvas.height = CANVAS_H;
-        const ctx = canvas.getContext("2d")!;
-        ctx.fillStyle = slide.bg;
-        ctx.fillRect(0, 0, CANVAS_W, CANVAS_H);
-        ctx.drawImage(img, 0, 0);
-        URL.revokeObjectURL(svgUrl);
-        canvas.toBlob((blob) => {
-          if (!blob) {
-            reject(new Error("PNG 변환 실패"));
-            return;
-          }
-          const link = document.createElement("a");
-          link.href = URL.createObjectURL(blob);
-          link.download = `${sanitizeFilename(slide.name || "slide")}.png`;
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-          setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-          resolve();
-        }, "image/png");
-      };
-      img.onerror = () => {
-        URL.revokeObjectURL(svgUrl);
-        reject(new Error("SVG 로드 실패"));
-      };
-      img.src = svgUrl;
-    });
-  };
-
-  const exportSlides = async (list: Slide[]) => {
-    if (list.length === 0) return;
-    setExporting(true);
-    setExportMenuOpen(false);
-    try {
-      for (const s of list) {
-        await exportSlideAsPNG(s);
-        // 브라우저가 동시 다운로드 막지 않도록 잠깐 대기
-        await new Promise((r) => setTimeout(r, 250));
-      }
-    } catch (err) {
-      alert(`내보내기 중 오류: ${err instanceof Error ? err.message : err}`);
-    } finally {
-      setExporting(false);
-    }
-  };
-
-  const exportCurrent = () => exportSlides(cur ? [cur] : []);
-  const exportAll = () => exportSlides(slides);
-  const exportPicked = () =>
-    exportSlides(slides.filter((s) => exportPicks.has(s.id)));
-
   const drawingPreview = useMemo(() => {
     if (!drawing) return null;
     const x = Math.min(drawing.start.x, drawing.current.x);
@@ -929,68 +819,6 @@ export default function SpaceMapView() {
           >
             ↷ 다시
           </button>
-          <span className="mx-1 h-5 w-px" style={{ background: "var(--space-border)" }} />
-          <div className="relative">
-            <button
-              onClick={() => setExportMenuOpen((o) => !o)}
-              disabled={exporting}
-              className="rounded px-2 py-1 text-xs disabled:opacity-50"
-              style={{
-                background: exportMenuOpen
-                  ? "var(--space-accent-soft)"
-                  : "transparent",
-                color: "var(--space-fg-muted)",
-              }}
-            >
-              {exporting ? "내보내는 중..." : "📥 내보내기 ▾"}
-            </button>
-            {exportMenuOpen && (
-              <div
-                className="absolute right-0 mt-1 z-30 rounded-lg border shadow-lg p-1 min-w-[180px]"
-                style={{
-                  background: "var(--space-card)",
-                  borderColor: "var(--space-border)",
-                }}
-                onMouseLeave={() => setExportMenuOpen(false)}
-              >
-                <button
-                  onClick={exportCurrent}
-                  className="w-full text-left rounded px-3 py-2 text-xs hover:bg-[var(--space-card-hover)]"
-                  style={{ color: "var(--space-fg)" }}
-                >
-                  📄 현재 슬라이드 (1장)
-                </button>
-                {exportPicks.size > 0 && (
-                  <button
-                    onClick={exportPicked}
-                    className="w-full text-left rounded px-3 py-2 text-xs hover:bg-[var(--space-card-hover)]"
-                    style={{ color: "var(--space-fg)" }}
-                  >
-                    📑 선택한 슬라이드 ({exportPicks.size}장)
-                  </button>
-                )}
-                <button
-                  onClick={exportAll}
-                  className="w-full text-left rounded px-3 py-2 text-xs hover:bg-[var(--space-card-hover)]"
-                  style={{ color: "var(--space-fg)" }}
-                >
-                  📚 전체 슬라이드 ({slides.length}장)
-                </button>
-                {exportPicks.size > 0 && (
-                  <button
-                    onClick={() => {
-                      setExportPicks(new Set());
-                      setExportMenuOpen(false);
-                    }}
-                    className="w-full text-left rounded px-3 py-2 text-xs hover:bg-[var(--space-card-hover)]"
-                    style={{ color: "var(--space-fg-soft)" }}
-                  >
-                    선택 해제
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
         </div>
       )}
 
@@ -1104,9 +932,7 @@ export default function SpaceMapView() {
                   slide={slide}
                   index={i}
                   active={i === current}
-                  picked={exportPicks.has(slide.id)}
                   onClick={() => switchTo(i)}
-                  onTogglePick={() => togglePick(slide.id)}
                   onRename={(name) => renameSlide(i, name)}
                   onDuplicate={() => duplicateSlide(i)}
                   onDelete={() => deleteSlide(i)}
@@ -1188,9 +1014,7 @@ function SlideThumb({
   slide,
   index,
   active,
-  picked,
   onClick,
-  onTogglePick,
   onRename,
   onDuplicate,
   onDelete,
@@ -1202,9 +1026,7 @@ function SlideThumb({
   slide: Slide;
   index: number;
   active: boolean;
-  picked: boolean;
   onClick: () => void;
-  onTogglePick: () => void;
   onRename: (n: string) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -1303,23 +1125,6 @@ function SlideThumb({
           </button>
         )}
       </div>
-      {/* 내보내기 체크박스 — 항상 보임 */}
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onTogglePick();
-        }}
-        className="absolute top-1 left-1 h-5 w-5 rounded flex items-center justify-center text-xs"
-        style={{
-          background: picked ? "var(--space-accent)" : "rgba(255,255,255,0.85)",
-          color: picked ? "white" : "var(--space-fg-muted)",
-          border: `1px solid ${picked ? "var(--space-accent)" : "var(--space-border)"}`,
-        }}
-        title="내보내기 체크"
-      >
-        {picked ? "✓" : ""}
-      </button>
       {canEdit && (
         <div className="absolute -top-2 right-0 hidden group-hover:flex items-center gap-0.5 rounded border px-1 py-0.5"
           style={{
