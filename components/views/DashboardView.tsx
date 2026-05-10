@@ -10,6 +10,7 @@ import {
 } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { descendantIds } from "@/lib/folders";
+import { exportPostsAs } from "@/lib/exportPosts";
 import BlogSidebar from "@/components/BlogSidebar";
 
 export default function DashboardView() {
@@ -84,96 +85,14 @@ export default function DashboardView() {
     });
   };
 
-  // HTML 본문 → 단락 텍스트 배열 (단락 단위로 줄나눔)
-  const htmlToParagraphs = (html: string): string[] => {
-    if (!html) return [];
-    // <br> 줄바꿈 보존, 단락성 태그를 \n\n 으로 분리
-    const normalized = html
-      .replace(/<\s*br\s*\/?\s*>/gi, "\n")
-      .replace(/<\s*\/(p|div|h[1-6]|li|blockquote|pre)\s*>/gi, "\n\n")
-      .replace(/<\s*li[^>]*>/gi, "• ")
-      .replace(/<[^>]+>/g, "");
-    return normalized
-      .replace(/&nbsp;/g, " ")
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .split(/\n\n+/)
-      .map((s) => s.replace(/\n/g, " ").trim())
-      .filter((s) => s.length > 0);
-  };
-
-  const exportPostAsTxt = (p: Post) => {
-    const paragraphs = htmlToParagraphs(p.content);
-    const meta = [
-      p.kind === "material" ? "자료" : null,
-      p.created_at.slice(0, 10),
-      p.category,
-    ]
-      .filter(Boolean)
-      .join(" · ");
-    const text = [p.title, meta, "", ...paragraphs].join("\r\n");
-    const blob = new Blob([`﻿${text}`], {
-      type: "text/plain;charset=utf-8",
-    });
-    triggerDownload(blob, `${sanitizeFilename(p.title || "글")}.txt`);
-  };
-
-  const exportPostAsDocx = async (p: Post) => {
-    const docx = await import("docx");
-    const { Document, Packer, Paragraph, TextRun, HeadingLevel } = docx;
-    const paragraphs = htmlToParagraphs(p.content);
-    const meta = [
-      p.kind === "material" ? "자료" : null,
-      p.created_at.slice(0, 10),
-      p.category,
-    ]
-      .filter(Boolean)
-      .join(" · ");
-    const children = [
-      new Paragraph({
-        text: p.title,
-        heading: HeadingLevel.HEADING_1,
-      }),
-      ...(meta
-        ? [
-            new Paragraph({
-              children: [
-                new TextRun({ text: meta, italics: true, color: "64748B" }),
-              ],
-            }),
-          ]
-        : []),
-      new Paragraph({}),
-      ...paragraphs.map(
-        (t) =>
-          new Paragraph({
-            children: [new TextRun(t)],
-          })
-      ),
-    ];
-    const doc = new Document({
-      sections: [{ children }],
-      creator: "Novel Blog",
-      title: p.title,
-    });
-    const blob = await Packer.toBlob(doc);
-    triggerDownload(blob, `${sanitizeFilename(p.title || "글")}.docx`);
-  };
-
   const exportPicked = async (format: "txt" | "docx") => {
     if (picked.size === 0) return;
     setExporting(true);
     try {
-      const list = rows.filter((p) => picked.has(p.id));
-      for (const p of list) {
-        if (format === "txt") exportPostAsTxt(p);
-        else await exportPostAsDocx(p);
-        // 브라우저 동시 다운로드 차단 회피
-        await new Promise((r) => setTimeout(r, 250));
-      }
+      await exportPostsAs(
+        rows.filter((p) => picked.has(p.id)),
+        format
+      );
     } catch (err) {
       alert(`내보내기 오류: ${err instanceof Error ? err.message : err}`);
     } finally {
@@ -371,22 +290,3 @@ export default function DashboardView() {
   );
 }
 
-function sanitizeFilename(name: string): string {
-  return (
-    name
-      .replace(/[\\/:*?"<>|]/g, "_")
-      .replace(/\s+/g, " ")
-      .trim() || "글"
-  );
-}
-
-function triggerDownload(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}

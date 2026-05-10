@@ -17,6 +17,10 @@ type Props = {
   selectedFolder: string | null;
   onPostDeleted: (id: string) => void;
   onPostToggled: (id: string) => void;
+  // 선택 모드 (소유자 전용 — UserBlogView에서 내보내기용)
+  selectMode?: boolean;
+  picked?: Set<string>;
+  onTogglePick?: (id: string) => void;
 };
 
 const CATS_KEY = "nb_main_collapsed_cats";
@@ -33,6 +37,9 @@ export default function ContentTree({
   selectedFolder,
   onPostDeleted,
   onPostToggled,
+  selectMode = false,
+  picked,
+  onTogglePick,
 }: Props) {
   const [collapsedCats, setCollapsedCats] = useState<Set<string>>(new Set());
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
@@ -160,6 +167,9 @@ export default function ContentTree({
           postsByFolder={postsByFolder}
           onPostDeleted={onPostDeleted}
           onPostToggled={onPostToggled}
+          selectMode={selectMode}
+          picked={picked}
+          onTogglePick={onTogglePick}
         />
       </ul>
     );
@@ -233,6 +243,11 @@ export default function ContentTree({
                           folders={folders}
                           onPostDeleted={onPostDeleted}
                           onPostToggled={onPostToggled}
+                          selectMode={selectMode}
+                          picked={picked?.has(p.id) ?? false}
+                          onTogglePick={
+                            onTogglePick ? () => onTogglePick(p.id) : undefined
+                          }
                         />
                       ))}
                     {/* 폴더 트리 */}
@@ -282,6 +297,11 @@ export default function ContentTree({
                     folders={folders}
                     onPostDeleted={onPostDeleted}
                     onPostToggled={onPostToggled}
+                    selectMode={selectMode}
+                    picked={picked?.has(p.id) ?? false}
+                    onTogglePick={
+                      onTogglePick ? () => onTogglePick(p.id) : undefined
+                    }
                   />
                 ))}
               {orphanRootFolders.map((node) => (
@@ -330,6 +350,9 @@ type FolderNodeProps = {
   postsByFolder: Map<string, Post[]>;
   onPostDeleted: (id: string) => void;
   onPostToggled: (id: string) => void;
+  selectMode?: boolean;
+  picked?: Set<string>;
+  onTogglePick?: (id: string) => void;
 };
 
 function FolderNodeView({
@@ -343,6 +366,9 @@ function FolderNodeView({
   postsByFolder,
   onPostDeleted,
   onPostToggled,
+  selectMode,
+  picked,
+  onTogglePick,
 }: FolderNodeProps) {
   const collapsed = collapsedFolders.has(node.id);
   const childFolders = node.children;
@@ -399,6 +425,11 @@ function FolderNodeView({
               folders={[]}
               onPostDeleted={onPostDeleted}
               onPostToggled={onPostToggled}
+              selectMode={selectMode}
+              picked={picked?.has(p.id) ?? false}
+              onTogglePick={
+                onTogglePick ? () => onTogglePick(p.id) : undefined
+              }
             />
           ))}
           {childFolders.map((child) => (
@@ -414,6 +445,9 @@ function FolderNodeView({
               postsByFolder={postsByFolder}
               onPostDeleted={onPostDeleted}
               onPostToggled={onPostToggled}
+              selectMode={selectMode}
+              picked={picked}
+              onTogglePick={onTogglePick}
             />
           ))}
         </ul>
@@ -435,6 +469,9 @@ type PostRowProps = {
   folders: Folder[];
   onPostDeleted: (id: string) => void;
   onPostToggled: (id: string) => void;
+  selectMode?: boolean;
+  picked?: boolean;
+  onTogglePick?: () => void;
 };
 
 function PostRow({
@@ -445,12 +482,26 @@ function PostRow({
   isOwner,
   onPostDeleted,
   onPostToggled,
+  selectMode = false,
+  picked = false,
+  onTogglePick,
 }: PostRowProps) {
   return (
     <li
       className="flex items-start justify-between gap-3 rounded py-1.5 pr-2 hover:bg-sky-50/70"
       style={{ paddingLeft: depth * 16 + 28 }}
     >
+      {selectMode && (
+        <input
+          type="checkbox"
+          checked={picked}
+          onChange={onTogglePick}
+          className="mt-1 h-4 w-4 shrink-0"
+          style={{ accentColor: "#0ea5e9" }}
+          title="내보내기 선택"
+          onClick={(e) => e.stopPropagation()}
+        />
+      )}
       <Link
         to={
           mode === "material"

@@ -15,6 +15,7 @@ import {
 } from "@/lib/supabase";
 import { useAuth } from "@/lib/AuthContext";
 import { descendantIds } from "@/lib/folders";
+import { exportPostsAs } from "@/lib/exportPosts";
 import BlogSidebar from "@/components/BlogSidebar";
 import ContentTree from "@/components/ContentTree";
 
@@ -33,6 +34,9 @@ export default function UserBlogView({ mode = "post" }: Props) {
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
 
   const isOwner = useMemo(
     () => !!profile && !!user && profile.id === user.id,
@@ -142,12 +146,85 @@ export default function UserBlogView({ mode = "post" }: Props) {
           </Link>
         </div>
         {isOwner && (
-          <Link
-            to={mode === "material" ? "/write?kind=material" : "/write"}
-            className="my-2 rounded-full border border-sky-200 px-3 py-1 text-xs text-slate-700 hover:border-brand hover:text-brand"
-          >
-            + 새 {mode === "material" ? "자료" : "글"}
-          </Link>
+          <div className="my-2 flex items-center gap-2 flex-wrap">
+            {selectMode && picked.size > 0 && (
+              <>
+                <span className="text-xs text-slate-500">
+                  {exporting ? "내보내는 중..." : `${picked.size}편 선택`}
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setExporting(true);
+                    try {
+                      await exportPostsAs(
+                        posts.filter((p) => picked.has(p.id)),
+                        "txt"
+                      );
+                    } catch (e) {
+                      alert(e instanceof Error ? e.message : "내보내기 실패");
+                    } finally {
+                      setExporting(false);
+                    }
+                  }}
+                  disabled={exporting}
+                  className="rounded-full bg-brand-light px-3 py-1 text-xs font-medium text-brand-dark hover:opacity-90 disabled:opacity-60"
+                >
+                  📄 .txt
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setExporting(true);
+                    try {
+                      await exportPostsAs(
+                        posts.filter((p) => picked.has(p.id)),
+                        "docx"
+                      );
+                    } catch (e) {
+                      alert(e instanceof Error ? e.message : "내보내기 실패");
+                    } finally {
+                      setExporting(false);
+                    }
+                  }}
+                  disabled={exporting}
+                  className="rounded-full bg-brand-light px-3 py-1 text-xs font-medium text-brand-dark hover:opacity-90 disabled:opacity-60"
+                >
+                  📘 .docx
+                </button>
+              </>
+            )}
+            {selectMode && (
+              <button
+                type="button"
+                onClick={() => setPicked(new Set())}
+                className="rounded-full border border-sky-200 px-3 py-1 text-xs text-slate-600 hover:border-brand"
+              >
+                선택 해제
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectMode((m) => !m);
+                setPicked(new Set());
+              }}
+              className="rounded-full border px-3 py-1 text-xs"
+              style={
+                selectMode
+                  ? { background: "#0ea5e9", color: "white", borderColor: "#0ea5e9" }
+                  : { borderColor: "#bae6fd", color: "#475569" }
+              }
+            >
+              {selectMode ? "✓ 선택 모드" : "☑ 선택 모드"}
+            </button>
+            <Link
+              to={mode === "material" ? "/write?kind=material" : "/write"}
+              className="rounded-full border border-sky-200 px-3 py-1 text-xs text-slate-700 hover:border-brand hover:text-brand"
+            >
+              + 새 {mode === "material" ? "자료" : "글"}
+            </Link>
+          </div>
         )}
       </nav>
 
@@ -184,6 +261,16 @@ export default function UserBlogView({ mode = "post" }: Props) {
               setPosts((ps) =>
                 ps.map((x) => (x.id === id ? { ...x, published: !x.published } : x))
               )
+            }
+            selectMode={isOwner && selectMode}
+            picked={picked}
+            onTogglePick={(id) =>
+              setPicked((prev) => {
+                const n = new Set(prev);
+                if (n.has(id)) n.delete(id);
+                else n.add(id);
+                return n;
+              })
             }
           />
         </div>
