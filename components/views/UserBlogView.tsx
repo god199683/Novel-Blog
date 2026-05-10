@@ -147,10 +147,14 @@ export default function UserBlogView({ mode = "post" }: Props) {
         </div>
         {isOwner && (
           <div className="my-2 flex items-center gap-2 flex-wrap">
-            {selectMode && picked.size > 0 && (
+            {selectMode && (
               <>
                 <span className="text-xs text-slate-500">
-                  {exporting ? "내보내는 중..." : `${picked.size}편 선택`}
+                  {exporting
+                    ? "내보내는 중..."
+                    : picked.size > 0
+                      ? `${picked.size}편 선택됨`
+                      : "체크해서 내보내기 →"}
                 </span>
                 <button
                   type="button"
@@ -167,8 +171,8 @@ export default function UserBlogView({ mode = "post" }: Props) {
                       setExporting(false);
                     }
                   }}
-                  disabled={exporting}
-                  className="rounded-full bg-brand-light px-3 py-1 text-xs font-medium text-brand-dark hover:opacity-90 disabled:opacity-60"
+                  disabled={exporting || picked.size === 0}
+                  className="rounded-full bg-brand-light px-3 py-1 text-xs font-medium text-brand-dark hover:opacity-90 disabled:opacity-40"
                 >
                   📄 .txt
                 </button>
@@ -187,21 +191,21 @@ export default function UserBlogView({ mode = "post" }: Props) {
                       setExporting(false);
                     }
                   }}
-                  disabled={exporting}
-                  className="rounded-full bg-brand-light px-3 py-1 text-xs font-medium text-brand-dark hover:opacity-90 disabled:opacity-60"
+                  disabled={exporting || picked.size === 0}
+                  className="rounded-full bg-brand-light px-3 py-1 text-xs font-medium text-brand-dark hover:opacity-90 disabled:opacity-40"
                 >
                   📘 .docx
                 </button>
+                {picked.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setPicked(new Set())}
+                    className="rounded-full border border-sky-200 px-3 py-1 text-xs text-slate-600 hover:border-brand"
+                  >
+                    선택 해제
+                  </button>
+                )}
               </>
-            )}
-            {selectMode && (
-              <button
-                type="button"
-                onClick={() => setPicked(new Set())}
-                className="rounded-full border border-sky-200 px-3 py-1 text-xs text-slate-600 hover:border-brand"
-              >
-                선택 해제
-              </button>
             )}
             <button
               type="button"
@@ -216,7 +220,7 @@ export default function UserBlogView({ mode = "post" }: Props) {
                   : { borderColor: "#bae6fd", color: "#475569" }
               }
             >
-              {selectMode ? "✓ 선택 모드" : "☑ 선택 모드"}
+              {selectMode ? "✓ 선택 모드 켜짐" : "☑ 내보내기 (선택 모드)"}
             </button>
             <Link
               to={mode === "material" ? "/write?kind=material" : "/write"}

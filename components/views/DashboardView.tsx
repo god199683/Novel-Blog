@@ -114,37 +114,37 @@ export default function DashboardView() {
           </p>
         </div>
         <div className="flex gap-2 flex-wrap items-center">
+          <span className="text-xs text-slate-500">
+            {exporting
+              ? "내보내는 중..."
+              : picked.size > 0
+                ? `${picked.size}편 선택됨`
+                : "체크해서 내보내기 →"}
+          </span>
+          <button
+            type="button"
+            onClick={() => exportPicked("txt")}
+            disabled={exporting || picked.size === 0}
+            className="rounded-full bg-brand-light px-3 py-2 text-sm font-medium text-brand-dark hover:opacity-90 disabled:opacity-40"
+          >
+            📄 .txt 내보내기
+          </button>
+          <button
+            type="button"
+            onClick={() => exportPicked("docx")}
+            disabled={exporting || picked.size === 0}
+            className="rounded-full bg-brand-light px-3 py-2 text-sm font-medium text-brand-dark hover:opacity-90 disabled:opacity-40"
+          >
+            📘 .docx 내보내기
+          </button>
           {picked.size > 0 && (
-            <>
-              <span className="text-xs text-slate-500">
-                {exporting
-                  ? "내보내는 중..."
-                  : `${picked.size}편 선택`}
-              </span>
-              <button
-                type="button"
-                onClick={() => exportPicked("txt")}
-                disabled={exporting}
-                className="rounded-full bg-brand-light px-3 py-2 text-sm font-medium text-brand-dark hover:opacity-90 disabled:opacity-60"
-              >
-                📄 .txt 내보내기
-              </button>
-              <button
-                type="button"
-                onClick={() => exportPicked("docx")}
-                disabled={exporting}
-                className="rounded-full bg-brand-light px-3 py-2 text-sm font-medium text-brand-dark hover:opacity-90 disabled:opacity-60"
-              >
-                📘 .docx 내보내기
-              </button>
-              <button
-                type="button"
-                onClick={() => setPicked(new Set())}
-                className="rounded-full border border-sky-200 px-3 py-2 text-sm text-slate-600 hover:border-brand"
-              >
-                선택 해제
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => setPicked(new Set())}
+              className="rounded-full border border-sky-200 px-3 py-2 text-sm text-slate-600 hover:border-brand"
+            >
+              선택 해제
+            </button>
           )}
           <Link
             to={mode === "material" ? "/write?kind=material" : "/write"}
