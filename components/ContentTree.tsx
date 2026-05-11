@@ -264,6 +264,9 @@ export default function ContentTree({
                         postsByFolder={postsByFolder}
                         onPostDeleted={onPostDeleted}
                         onPostToggled={onPostToggled}
+                        selectMode={selectMode}
+                        picked={picked}
+                        onTogglePick={onTogglePick}
                       />
                     ))}
                   </ul>
@@ -317,6 +320,9 @@ export default function ContentTree({
                   postsByFolder={postsByFolder}
                   onPostDeleted={onPostDeleted}
                   onPostToggled={onPostToggled}
+                  selectMode={selectMode}
+                  picked={picked}
+                  onTogglePick={onTogglePick}
                 />
               ))}
             </ul>
