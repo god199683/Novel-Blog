@@ -492,15 +492,24 @@ function PostRow({
       style={{ paddingLeft: depth * 16 + 28 }}
     >
       {selectMode && (
-        <input
-          type="checkbox"
-          checked={picked}
-          onChange={onTogglePick}
-          className="mt-1 h-4 w-4 shrink-0"
-          style={{ accentColor: "#0ea5e9" }}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onTogglePick?.();
+          }}
+          className="mt-1 h-5 w-5 shrink-0 rounded border flex items-center justify-center text-[11px] font-bold transition-colors"
+          style={{
+            background: picked ? "#0ea5e9" : "white",
+            borderColor: picked ? "#0ea5e9" : "#cbd5e1",
+            color: picked ? "white" : "transparent",
+          }}
           title="내보내기 선택"
-          onClick={(e) => e.stopPropagation()}
-        />
+          aria-pressed={picked}
+        >
+          ✓
+        </button>
       )}
       <Link
         to={
