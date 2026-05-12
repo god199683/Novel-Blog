@@ -73,11 +73,9 @@ export default function DashboardView() {
     };
   }, [user, selectedCategory, selectedFolder, mode]);
 
-  if (loading) return <p className="py-10 text-center text-slate-500">로딩...</p>;
-  if (!user || !profile) return <Navigate to="/login" replace />;
-
   // 사이드바 필터(카테고리/폴더)가 걸렸을 때, 본문에 실제로 보이는 글만 추림.
   // 전체 선택 버튼도 이 목록을 대상으로 동작.
+  // ⚠️ Rules of Hooks — early return보다 위에 있어야 한다.
   const filtered = useMemo(
     () =>
       rows.filter((p) => {
@@ -93,6 +91,9 @@ export default function DashboardView() {
 
   const allSelected =
     filtered.length > 0 && filtered.every((p) => picked.has(p.id));
+
+  if (loading) return <p className="py-10 text-center text-slate-500">로딩...</p>;
+  if (!user || !profile) return <Navigate to="/login" replace />;
 
   const togglePick = (id: string) => {
     setPicked((prev) => {
