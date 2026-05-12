@@ -41,19 +41,10 @@ export function htmlToParagraphs(html: string): string[] {
     .filter((s) => s.length > 0);
 }
 
-function metaLine(p: Post): string {
-  return [
-    p.kind === "material" ? "자료" : null,
-    p.created_at.slice(0, 10),
-    p.category,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-}
-
 export function exportPostAsTxt(p: Post) {
+  // 파일 이름만 제목으로 — 본문에는 제목/날짜 등 메타데이터를 넣지 않음
   const paragraphs = htmlToParagraphs(p.content);
-  const text = [p.title, metaLine(p), "", ...paragraphs].join("\r\n");
+  const text = paragraphs.join("\r\n");
   // BOM (﻿) — 메모장에서 한글 깨짐 방지
   const blob = new Blob([`﻿${text}`], {
     type: "text/plain;charset=utf-8",
@@ -63,25 +54,12 @@ export function exportPostAsTxt(p: Post) {
 
 export async function exportPostAsDocx(p: Post) {
   const docx = await import("docx");
-  const { Document, Packer, Paragraph, TextRun, HeadingLevel } = docx;
+  const { Document, Packer, Paragraph, TextRun } = docx;
+  // 파일 이름만 제목으로 — 본문에는 제목/날짜 등 메타데이터를 넣지 않음
   const paragraphs = htmlToParagraphs(p.content);
-  const meta = metaLine(p);
-  const children = [
-    new Paragraph({ text: p.title, heading: HeadingLevel.HEADING_1 }),
-    ...(meta
-      ? [
-          new Paragraph({
-            children: [
-              new TextRun({ text: meta, italics: true, color: "64748B" }),
-            ],
-          }),
-        ]
-      : []),
-    new Paragraph({}),
-    ...paragraphs.map(
-      (t) => new Paragraph({ children: [new TextRun(t)] })
-    ),
-  ];
+  const children = paragraphs.map(
+    (t) => new Paragraph({ children: [new TextRun(t)] })
+  );
   const doc = new Document({
     sections: [{ children }],
     creator: "Novel Blog",
