@@ -2,9 +2,19 @@
 import type { Post } from "@/lib/supabase";
 
 export function sanitizeFilename(name: string): string {
+  // Windows·OS가 금지하는 문자(\ / : * ? " < > |)를
+  // 시각적으로 비슷한 전각 문자로 치환 — 가독성을 유지하면서 안전한 파일명 생성.
+  // 경로 구분자(\ /)는 의미가 달라질 수 있어 그대로 _ 로 변환.
   return (
     name
-      .replace(/[\\/:*?"<>|]/g, "_")
+      .replace(/[\\/]/g, "_")
+      .replace(/:/g, "：") // U+FF1A FULLWIDTH COLON
+      .replace(/\*/g, "＊") // U+FF0A FULLWIDTH ASTERISK
+      .replace(/\?/g, "？") // U+FF1F FULLWIDTH QUESTION MARK
+      .replace(/"/g, "＂") // U+FF02 FULLWIDTH QUOTATION MARK
+      .replace(/</g, "＜") // U+FF1C
+      .replace(/>/g, "＞") // U+FF1E
+      .replace(/\|/g, "｜") // U+FF5C
       .replace(/\s+/g, " ")
       .trim() || "글"
   );

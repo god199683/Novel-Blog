@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import {
   supabase,
@@ -76,11 +76,43 @@ export default function DashboardView() {
   if (loading) return <p className="py-10 text-center text-slate-500">로딩...</p>;
   if (!user || !profile) return <Navigate to="/login" replace />;
 
+  // 사이드바 필터(카테고리/폴더)가 걸렸을 때, 본문에 실제로 보이는 글만 추림.
+  // 전체 선택 버튼도 이 목록을 대상으로 동작.
+  const filtered = useMemo(
+    () =>
+      rows.filter((p) => {
+        if (selectedCategory && p.category !== selectedCategory) return false;
+        if (selectedFolder) {
+          const ids = descendantIds(folders, selectedFolder);
+          if (!p.folder_id || !ids.includes(p.folder_id)) return false;
+        }
+        return true;
+      }),
+    [rows, folders, selectedCategory, selectedFolder]
+  );
+
+  const allSelected =
+    filtered.length > 0 && filtered.every((p) => picked.has(p.id));
+
   const togglePick = (id: string) => {
     setPicked((prev) => {
       const n = new Set(prev);
       if (n.has(id)) n.delete(id);
       else n.add(id);
+      return n;
+    });
+  };
+
+  const toggleAll = () => {
+    setPicked((prev) => {
+      if (allSelected) {
+        // 보이는 것만 해제
+        const n = new Set(prev);
+        for (const p of filtered) n.delete(p.id);
+        return n;
+      }
+      const n = new Set(prev);
+      for (const p of filtered) n.add(p.id);
       return n;
     });
   };
@@ -136,6 +168,14 @@ export default function DashboardView() {
             className="rounded-full bg-brand-light px-3 py-2 text-sm font-medium text-brand-dark hover:opacity-90 disabled:opacity-40"
           >
             📘 .docx 내보내기
+          </button>
+          <button
+            type="button"
+            onClick={toggleAll}
+            disabled={filtered.length === 0}
+            className="rounded-full border border-sky-200 px-3 py-2 text-sm text-slate-600 hover:border-brand disabled:opacity-40"
+          >
+            {allSelected ? "전체 해제" : "전체 선택"}
           </button>
           {picked.size > 0 && (
             <button
@@ -196,14 +236,6 @@ export default function DashboardView() {
 
         <div>
           {(() => {
-            const filtered = rows.filter((p) => {
-              if (selectedCategory && p.category !== selectedCategory) return false;
-              if (selectedFolder) {
-                const ids = descendantIds(folders, selectedFolder);
-                if (!p.folder_id || !ids.includes(p.folder_id)) return false;
-              }
-              return true;
-            });
             if (loadingData) {
               return (
                 <p className="py-10 text-center text-slate-500">불러오는 중...</p>

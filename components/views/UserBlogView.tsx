@@ -43,6 +43,35 @@ export default function UserBlogView({ mode = "post" }: Props) {
     [profile, user]
   );
 
+  // 사이드바 필터(카테고리/폴더)에 따라 본문에 실제로 보이는 글만 추림.
+  // 전체 선택 버튼이 이 목록을 대상으로 동작 — 필터가 걸려 있으면
+  // 그 범위 안에서만 전체 선택됨.
+  const visiblePosts = useMemo(() => {
+    return posts.filter((p) => {
+      if (selectedCategory && p.category !== selectedCategory) return false;
+      if (selectedFolder) {
+        const ids = descendantIds(folders, selectedFolder);
+        if (!p.folder_id || !ids.includes(p.folder_id)) return false;
+      }
+      return true;
+    });
+  }, [posts, folders, selectedCategory, selectedFolder]);
+
+  const allSelected =
+    visiblePosts.length > 0 && visiblePosts.every((p) => picked.has(p.id));
+
+  const toggleAll = () => {
+    setPicked((prev) => {
+      const n = new Set(prev);
+      if (allSelected) {
+        for (const p of visiblePosts) n.delete(p.id);
+      } else {
+        for (const p of visiblePosts) n.add(p.id);
+      }
+      return n;
+    });
+  };
+
   useEffect(() => {
     if (!username) return;
     let active = true;
@@ -195,6 +224,14 @@ export default function UserBlogView({ mode = "post" }: Props) {
                   className="rounded-full bg-brand-light px-3 py-1 text-xs font-medium text-brand-dark hover:opacity-90 disabled:opacity-40"
                 >
                   📘 .docx
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleAll}
+                  disabled={visiblePosts.length === 0}
+                  className="rounded-full border border-sky-200 px-3 py-1 text-xs text-slate-600 hover:border-brand disabled:opacity-40"
+                >
+                  {allSelected ? "전체 해제" : "전체 선택"}
                 </button>
                 {picked.size > 0 && (
                   <button
